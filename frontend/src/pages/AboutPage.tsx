@@ -7,8 +7,23 @@ interface About {
   version: string;
   engine_version: string;
   catalogue_hash: string;
-  build_date: string;
-  build_time: string;
+  build_date: string | null;
+  build_time: string | null;
+}
+
+/** No injected stamp means no build date. Saying "development build" is honest;
+ *  printing a made-up date is not. */
+export function buildStamp(date: string | null, time: string | null): string {
+  if (!date) return "development build";
+  const parsed = new Date(date);
+  const day = Number.isNaN(parsed.getTime())
+    ? date
+    : parsed.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+  return `built ${day}${time ? ` at ${time}` : ""}`;
 }
 
 interface Freshness {
@@ -69,13 +84,7 @@ export default function AboutPage() {
             <span className="font-semibold text-slate-700 dark:text-slate-200">
               {about.version}
             </span>{" "}
-            · built{" "}
-            {new Date(about.build_date).toLocaleDateString(undefined, {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
-            {about.build_time ? ` at ${about.build_time}` : ""} · engine{" "}
+            · {buildStamp(about.build_date, about.build_time)} · engine{" "}
             {about.engine_version} · rules {about.catalogue_hash}
           </p>
         )}

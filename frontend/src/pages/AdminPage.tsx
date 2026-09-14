@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { AppConfig, Environment } from "../api/types";
 import SetupWizard from "../components/SetupWizard";
 import DemoDataCard from "../components/DemoDataCard";
+import { buildStamp } from "./AboutPage";
 
 function Field({
   label,
@@ -14,7 +15,7 @@ function Field({
       <span className="text-sm text-slate-500 dark:text-slate-400">{label}</span>
       <input
         {...props}
-        className="mt-1 w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm"
+        className="input mt-1"
       />
     </label>
   );
@@ -24,7 +25,7 @@ export default function AdminPage() {
   const nav = useNavigate();
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [envs, setEnvs] = useState<Environment[]>([]);
-  const [about, setAbout] = useState<{ version: string; engine_version: string; catalogue_hash: string; build_date: string; build_time: string } | null>(null);
+  const [about, setAbout] = useState<{ version: string; engine_version: string; catalogue_hash: string; build_date: string | null; build_time: string | null } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [redirectUri, setRedirectUri] = useState("");
@@ -197,6 +198,22 @@ export default function AdminPage() {
 
       {msg && <div className="card p-3 text-sm text-slate-900 dark:text-slate-100 border-l-4 border-brand-500">{msg}</div>}
 
+      <DemoDataCard />
+
+      <div className="card p-5">
+        <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1">Setup guide</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          Step-by-step instructions for the app registration, Dataverse permissions and
+          first scan — plus what to check when something looks wrong.
+        </p>
+        <Link
+          to="/help"
+          className="inline-flex items-center gap-1 rounded-lg border border-brand-300 bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-700 dark:bg-brand-900/20 dark:text-brand-400"
+        >
+          Open setup guide →
+        </Link>
+      </div>
+
       <div className="card p-5">
         <div className="flex items-center justify-between">
           <div>
@@ -207,18 +224,15 @@ export default function AdminPage() {
             </p>
             {about && (
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                Version <span className="font-semibold text-slate-900 dark:text-slate-100">{about.version}</span> · built{" "}
-                {new Date(about.build_date).toLocaleDateString(undefined, {
-                  year: "numeric", month: "short", day: "numeric",
-                })}
-                {about.build_time ? ` at ${about.build_time}` : ""}{" "}
+                Version <span className="font-semibold text-slate-900 dark:text-slate-100">{about.version}</span>{" "}
+                · {buildStamp(about.build_date, about.build_time)}{" "}
                 · engine {about.engine_version} · rules {about.catalogue_hash}
               </p>
             )}
           </div>
           <Link
             to="/rules"
-            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm font-medium"
+            className="btn-secondary"
           >
             Manage rules →
           </Link>
@@ -259,7 +273,7 @@ export default function AdminPage() {
                   <button onClick={() => saveEdit(e)} disabled={busy || !editForm.display_name} className="text-sm px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:opacity-90 disabled:opacity-50">
                     Save
                   </button>
-                  <button onClick={cancelEdit} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700">
+                  <button onClick={cancelEdit} disabled={busy} className="btn-secondary px-3 py-1.5">
                     Cancel
                   </button>
                 </div>
@@ -281,10 +295,10 @@ export default function AdminPage() {
                       : "Never scanned"}
                   </div>
                 </div>
-                <button onClick={() => startEdit(e)} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700">
+                <button onClick={() => startEdit(e)} disabled={busy} className="btn-secondary px-3 py-1.5">
                   Edit
                 </button>
-                <button onClick={() => testConn(e.id)} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700">
+                <button onClick={() => testConn(e.id)} disabled={busy} className="btn-secondary px-3 py-1.5">
                   Test
                 </button>
                 <button onClick={() => scanEnv(e.id)} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:opacity-90">
@@ -357,8 +371,6 @@ export default function AdminPage() {
           onFocus={(e) => e.currentTarget.select()}
         />
       </div>
-
-      <DemoDataCard />
 
       <SetupWizard defaultOpen={!cfg.configured} />
     </div>

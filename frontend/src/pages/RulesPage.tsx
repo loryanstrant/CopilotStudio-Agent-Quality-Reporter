@@ -133,7 +133,7 @@ export default function RulesPage() {
                   max={100}
                   value={val(r, "weight") as number}
                   onChange={(e) => edit(r.rule_id, { weight: Number(e.target.value) })}
-                  className="w-20 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 text-sm text-center"
+                  className="input w-20 px-2 py-1 text-center"
                 />
               </div>
 
@@ -143,7 +143,7 @@ export default function RulesPage() {
                   value={(val(r, "explanation") as string) || ""}
                   onChange={(e) => edit(r.rule_id, { explanation: e.target.value })}
                   rows={2}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm resize-y"
+                  className="input resize-y"
                 />
               </div>
 
