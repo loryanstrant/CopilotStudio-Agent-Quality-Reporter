@@ -16,7 +16,10 @@ param dbPassword string
 
 @secure()
 @description('Initial admin password for the app password gate.')
-param appAdminPassword string
+param adminPassword string
+
+@description('Initial admin username for the app password gate.')
+param adminUsername string = 'admin'
 
 resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
   name: 'rg-${name}'
@@ -31,7 +34,8 @@ module resources 'resources.bicep' = {
     location: location
     dbAdmin: dbAdmin
     dbPassword: dbPassword
-    appAdminPassword: appAdminPassword
+    adminUsername: adminUsername
+    adminPassword: adminPassword
   }
 }
 

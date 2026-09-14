@@ -4,7 +4,8 @@
   "parameters": {
     "name": { "value": "agentquality" },
     "dbAdmin": { "value": "aqpadmin" },
-    "dbPassword": { "value": "" },
-    "appAdminPassword": { "value": "" }
+    "dbPassword": { "value": "${POSTGRES_ADMIN_PASSWORD}" },
+    "adminUsername": { "value": "${ADMIN_USERNAME=admin}" },
+    "adminPassword": { "value": "${ADMIN_PASSWORD}" }
   }
 }

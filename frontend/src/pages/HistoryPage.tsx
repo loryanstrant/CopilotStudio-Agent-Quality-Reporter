@@ -39,7 +39,7 @@ export default function HistoryPage() {
 
   const Th = ({ label, k }: { label: string; k: SortKey }) => (
     <th
-      className="py-2 pr-3 font-medium cursor-pointer select-none hover:text-ink"
+      className="py-2 pr-3 font-medium cursor-pointer select-none hover:text-slate-900 dark:hover:text-slate-100"
       onClick={() => toggleSort(k)}
     >
       {label}
@@ -48,11 +48,20 @@ export default function HistoryPage() {
   );
 
   return (
+    <div className="space-y-6">
+    <div>
+      <h1 className="text-2xl font-bold">History</h1>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        Every scan that has run, with the agents covered and the resulting score.
+      </p>
+    </div>
     <div className="card p-5">
-      <h3 className="font-semibold text-ink mb-4">Scan history</h3>
+      <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
+        Scan history
+      </h3>
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-slate border-b border-line">
+          <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
             <Th label="When" k="started_at" />
             <Th label="Environment" k="environment" />
             <Th label="Source" k="source" />
@@ -64,15 +73,15 @@ export default function HistoryPage() {
         </thead>
         <tbody>
           {sorted.map((s) => (
-            <tr key={s.id} className="border-b border-line">
-              <td className="py-2 pr-3 text-slate whitespace-nowrap">
+            <tr key={s.id} className="border-b border-slate-200 dark:border-slate-700">
+              <td className="py-2 pr-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                 {s.started_at ? new Date(s.started_at).toLocaleString() : ""}
               </td>
-              <td className="py-2 pr-3 text-ink">{s.environment}</td>
-              <td className="py-2 pr-3 text-slate">{s.source}</td>
-              <td className="py-2 pr-3 text-slate">{s.trigger}</td>
-              <td className="py-2 pr-3 text-slate">{s.agent_count}</td>
-              <td className="py-2 pr-3 font-semibold text-ink">{s.avg_score ?? "–"}</td>
+              <td className="py-2 pr-3 text-slate-900 dark:text-slate-100">{s.environment}</td>
+              <td className="py-2 pr-3 text-slate-500 dark:text-slate-400">{s.source}</td>
+              <td className="py-2 pr-3 text-slate-500 dark:text-slate-400">{s.trigger}</td>
+              <td className="py-2 pr-3 text-slate-500 dark:text-slate-400">{s.agent_count}</td>
+              <td className="py-2 pr-3 font-semibold text-slate-900 dark:text-slate-100">{s.avg_score ?? "–"}</td>
               <td className="py-2 pr-3">
                 {s.grade && (
                   <span className="pill text-white" style={{ background: GRADE_COLORS[s.grade] || "#8D99AE" }}>
@@ -84,13 +93,14 @@ export default function HistoryPage() {
           ))}
           {sorted.length === 0 && (
             <tr>
-              <td colSpan={7} className="py-6 text-center text-slate">
+              <td colSpan={7} className="py-6 text-center text-slate-500 dark:text-slate-400">
                 No scans recorded yet.
               </td>
             </tr>
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

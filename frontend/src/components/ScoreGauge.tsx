@@ -33,7 +33,8 @@ export default function ScoreGauge({
         <path
           d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
           fill="none"
-          stroke="var(--track)"
+          stroke="currentColor"
+          className="text-slate-200 dark:text-slate-700"
           strokeWidth="16"
           strokeLinecap="round"
         />
@@ -44,10 +45,25 @@ export default function ScoreGauge({
           strokeWidth="16"
           strokeLinecap="round"
         />
-        <text x={cx} y={cy - 18} textAnchor="middle" fontSize="42" fontWeight="700" fill="var(--ink)">
+        <text
+          x={cx}
+          y={cy - 18}
+          textAnchor="middle"
+          fontSize="42"
+          fontWeight="700"
+          fill="currentColor"
+          className="text-slate-900 dark:text-slate-100"
+        >
           {score}
         </text>
-        <text x={cx} y={cy + 4} textAnchor="middle" fontSize="12" fill="var(--slate)">
+        <text
+          x={cx}
+          y={cy + 4}
+          textAnchor="middle"
+          fontSize="12"
+          fill="currentColor"
+          className="text-slate-500 dark:text-slate-400"
+        >
           / 100
         </text>
       </svg>

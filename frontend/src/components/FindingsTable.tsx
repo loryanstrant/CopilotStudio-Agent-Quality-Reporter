@@ -17,7 +17,7 @@ export default function FindingsTable({ findings }: { findings: Finding[] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-slate border-b border-line">
+          <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
             <th className="py-2 pr-3 font-medium">Rule</th>
             <th className="py-2 pr-3 font-medium">Check</th>
             <th className="py-2 pr-3 font-medium">Status</th>
@@ -29,9 +29,9 @@ export default function FindingsTable({ findings }: { findings: Finding[] }) {
         </thead>
         <tbody>
           {findings.map((f, i) => (
-            <tr key={i} className="border-b border-line align-top">
-              <td className="py-2 pr-3 font-mono text-xs leading-5 text-slate whitespace-nowrap">{f.rule_id}</td>
-              <td className="py-2 pr-3 text-ink">{f.name}</td>
+            <tr key={i} className="border-b border-slate-200 dark:border-slate-700 align-top">
+              <td className="py-2 pr-3 font-mono text-xs leading-5 text-slate-500 dark:text-slate-400 whitespace-nowrap">{f.rule_id}</td>
+              <td className="py-2 pr-3 text-slate-900 dark:text-slate-100">{f.name}</td>
               <td className="py-2 pr-3">
                 <span className={STATUS_STYLE[f.status] || "badge badge-off"}>
                   {f.status}
@@ -41,11 +41,11 @@ export default function FindingsTable({ findings }: { findings: Finding[] }) {
               <td className="py-2 pr-3">
                 <span className={SEV_STYLE[f.severity] || "badge badge-off"}>{f.severity}</span>
               </td>
-              <td className="py-2 pr-3 text-slate whitespace-nowrap">
+              <td className="py-2 pr-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                 {f.scope.startsWith("bot:") ? "agent" : "solution"}
               </td>
-              <td className="py-2 pr-3 text-slate max-w-md">{f.details}</td>
-              <td className="py-2 pr-3 text-slate text-xs whitespace-nowrap">{cleanPP(f.pp_reference)}</td>
+              <td className="py-2 pr-3 text-slate-500 dark:text-slate-400 max-w-md">{f.details}</td>
+              <td className="py-2 pr-3 text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">{cleanPP(f.pp_reference)}</td>
             </tr>
           ))}
         </tbody>

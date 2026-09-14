@@ -67,25 +67,25 @@ export default function RulesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-ink">Rules</h2>
-          <p className="text-sm text-slate">
+          <h1 className="text-2xl font-bold">Rules</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Enable/disable rules, adjust scoring weights, and edit explanations. Changes apply to the
             next scan.
           </p>
         </div>
-        <Link to="/settings" className="text-sm text-orange hover:underline">
+        <Link to="/settings" className="text-sm text-brand-600 dark:text-brand-500 hover:underline">
           ← Back to Admin
         </Link>
       </div>
 
-      {msg && <div className="card p-3 text-sm text-ink border-l-4 border-orange">{msg}</div>}
+      {msg && <div className="card p-3 text-sm text-slate-900 dark:text-slate-100 border-l-4 border-brand-500">{msg}</div>}
 
       <div className="card overflow-x-auto">
         <div className="min-w-[900px]">
           {/* Header row */}
           <div
             style={GRID_STYLE}
-            className={`${COLS} px-5 py-3 border-b border-line text-xs font-semibold uppercase tracking-wide text-slate`}
+            className={`${COLS} px-5 py-3 border-b border-slate-200 dark:border-slate-700 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400`}
           >
             <div>Rule</div>
             <div>Check</div>
@@ -100,19 +100,19 @@ export default function RulesPage() {
             <div
               key={r.rule_id}
               style={GRID_STYLE}
-              className={`${COLS} px-5 py-3 border-b border-line last:border-0`}
+              className={`${COLS} px-5 py-3 border-b border-slate-200 dark:border-slate-700 last:border-0`}
             >
               {/* Rule id + badges */}
               <div className="space-y-1">
-                <div className="font-mono text-xs text-slate">{r.rule_id}</div>
+                <div className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.rule_id}</div>
                 <span className={SEV_BADGE[r.severity] || "badge badge-off"}>{r.severity}</span>
                 <div className="badge badge-off">{r.scope}</div>
               </div>
 
               {/* Check name + P&P */}
               <div>
-                <div className="font-medium text-ink">{r.name}</div>
-                <div className="text-xs text-slate mt-0.5">P&amp;P: {cleanPP(r.pp_reference)}</div>
+                <div className="font-medium text-slate-900 dark:text-slate-100">{r.name}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">P&amp;P: {cleanPP(r.pp_reference)}</div>
               </div>
 
               {/* Enabled */}
@@ -133,7 +133,7 @@ export default function RulesPage() {
                   max={100}
                   value={val(r, "weight") as number}
                   onChange={(e) => edit(r.rule_id, { weight: Number(e.target.value) })}
-                  className="w-20 border border-hairline rounded-lg px-2 py-1 text-sm text-center"
+                  className="w-20 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 text-sm text-center"
                 />
               </div>
 
@@ -143,7 +143,7 @@ export default function RulesPage() {
                   value={(val(r, "explanation") as string) || ""}
                   onChange={(e) => edit(r.rule_id, { explanation: e.target.value })}
                   rows={2}
-                  className="w-full border border-hairline rounded-lg px-3 py-2 text-sm resize-y"
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm resize-y"
                 />
               </div>
 
@@ -152,7 +152,7 @@ export default function RulesPage() {
                 <button
                   onClick={() => save(r)}
                   disabled={!dirty(r) || busy === r.rule_id}
-                  className="px-3 py-1.5 rounded-lg bg-orange text-white text-sm font-medium hover:opacity-90 disabled:opacity-40"
+                  className="px-3 py-1.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:opacity-90 disabled:opacity-40"
                 >
                   {busy === r.rule_id ? "…" : "Save"}
                 </button>

@@ -4,11 +4,11 @@ function Bar({ label, value, max = 5 }: { label: string; value: number | null; m
   const v = value ?? 0;
   return (
     <div className="flex items-center gap-3 text-sm">
-      <span className="w-28 text-slate">{label}</span>
-      <div className="flex-1 h-3 bg-track rounded">
-        <div className="h-3 rounded bg-orange" style={{ width: `${(v / max) * 100}%` }} />
+      <span className="w-28 text-slate-500 dark:text-slate-400">{label}</span>
+      <div className="flex-1 h-3 bg-slate-200 dark:bg-slate-700 rounded">
+        <div className="h-3 rounded bg-brand-600" style={{ width: `${(v / max) * 100}%` }} />
       </div>
-      <span className="w-10 text-right font-semibold text-ink">
+      <span className="w-10 text-right font-semibold text-slate-900 dark:text-slate-100">
         {value == null ? "–" : `${v}/${max}`}
       </span>
     </div>
@@ -26,7 +26,7 @@ function Flag({ label, on }: { label: string; on: boolean | null }) {
 export default function JudgeCard({ j }: { j: Judge }) {
   if (j.skipped || j.error) {
     return (
-      <div className="text-sm text-slate">
+      <div className="text-sm text-slate-500 dark:text-slate-400">
         {j.error ? `Judge error: ${j.error}` : j.summary || "LLM judge not run for this scan."}
       </div>
     );
@@ -43,13 +43,13 @@ export default function JudgeCard({ j }: { j: Judge }) {
         <Flag label="Child pattern" on={j.child_pattern_detected} />
         <Flag label="Output format" on={j.output_format_guidance} />
       </div>
-      {j.summary && <p className="text-sm text-slate">{j.summary}</p>}
+      {j.summary && <p className="text-sm text-slate-500 dark:text-slate-400">{j.summary}</p>}
       {(j.recommended_changes || j.top_weaknesses) && (
         <div>
-          <div className="text-xs font-semibold text-slate uppercase tracking-wide mb-1">
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
             Recommended changes
           </div>
-          <ul className="list-disc pl-5 text-sm text-ink space-y-0.5">
+          <ul className="list-disc pl-5 text-sm text-slate-900 dark:text-slate-100 space-y-0.5">
             {(j.recommended_changes || j.top_weaknesses || []).map((w, i) => (
               <li key={i}>{w}</li>
             ))}

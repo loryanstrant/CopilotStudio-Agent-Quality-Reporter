@@ -1,7 +1,7 @@
 [project]
-name = "agent-quality-platform"
+name = "agent-quality-reporter"
 version = "0.7.0"
-description = "Self-contained, containerised Copilot Studio Agent Quality Platform (live API ingest -> Postgres -> web dashboard)"
+description = "Self-contained, containerised Copilot Studio Agent Quality Reporter (live API ingest -> Postgres -> web dashboard)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

@@ -78,7 +78,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Copilot Studio Agent Quality Platform",
+    title="Copilot Studio Agent Quality Reporter",
     version=APP_VERSION,
     description="Live-API quality scanning for Copilot Studio agents with a web dashboard.",
     lifespan=lifespan,

@@ -10,7 +10,7 @@ function envKey(id: number | null | undefined): string {
 }
 
 function GradeBadge({ grade }: { grade: string | null }) {
-  if (!grade) return <span className="text-slate">–</span>;
+  if (!grade) return <span className="text-slate-500 dark:text-slate-400">–</span>;
   return (
     <span
       className="inline-grid place-items-center w-7 h-7 rounded-full text-white text-sm font-bold"
@@ -26,10 +26,10 @@ function ScoreBar({ score }: { score: number | null }) {
   const color = v >= 75 ? "#2A9D8F" : v >= 60 ? "#E9C46A" : v >= 40 ? "#F4A261" : "#E63946";
   return (
     <div className="flex items-center gap-2 min-w-[120px]">
-      <div className="flex-1 h-2 bg-track rounded">
+      <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded">
         <div className="h-2 rounded" style={{ width: `${v}%`, background: color }} />
       </div>
-      <span className="w-8 text-right font-semibold text-ink text-sm">{score ?? "–"}</span>
+      <span className="w-8 text-right font-semibold text-slate-900 dark:text-slate-100 text-sm">{score ?? "–"}</span>
     </div>
   );
 }
@@ -123,7 +123,7 @@ export default function OverviewPage() {
 
   const Th = ({ label, k }: { label: string; k: SortKey }) => (
     <th
-      className="py-2 pr-3 font-medium cursor-pointer select-none hover:text-ink"
+      className="py-2 pr-3 font-medium cursor-pointer select-none hover:text-slate-900 dark:hover:text-slate-100"
       onClick={() => toggleSort(k)}
     >
       {label}
@@ -138,23 +138,30 @@ export default function OverviewPage() {
   if (err) return <div className="text-fail">{err}</div>;
   if (envs.length === 0)
     return (
-      <div className="card p-8 text-center text-slate">
+      <div className="card p-8 text-center text-slate-500 dark:text-slate-400">
         No scans yet. An admin can run one from the Admin page.
       </div>
     );
 
   return (
     <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Overview</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Every agent in the selected environment, with its score, grade and findings.
+        </p>
+      </div>
+
       {/* Environment selector. */}
       <div className="card p-4">
-        <label className="block text-xs font-semibold uppercase tracking-wide text-slate mb-2">
+        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
           Environment
         </label>
         <div className="flex flex-wrap items-center gap-3">
           <select
             value={selKey}
             onChange={(ev) => selectKey(ev.target.value)}
-            className="min-w-[280px] border border-hairline rounded-lg px-3 py-2 text-sm font-medium text-ink"
+            className="min-w-[280px] border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100"
           >
             <option value={ALL}>All environments</option>
             {envs.map((e) => (
@@ -164,18 +171,18 @@ export default function OverviewPage() {
             ))}
           </select>
           {isAll && anyScanning && (
-            <span className="flex items-center gap-2 text-sm text-slate">
-              <span className="w-2 h-2 rounded-full bg-orange animate-pulse" /> Scanning in progress…
+            <span className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+              <span className="w-2 h-2 rounded-full bg-brand-600 animate-pulse" /> Scanning in progress…
             </span>
           )}
           {!isAll && selEnv && (
             selProgress ? (
-              <span className="flex items-center gap-2 text-sm text-slate">
-                <span className="w-2 h-2 rounded-full bg-orange animate-pulse" />
+              <span className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                <span className="w-2 h-2 rounded-full bg-brand-600 animate-pulse" />
                 Scanning {selProgress.agents_done}/{selProgress.agent_count} agent(s)…
               </span>
             ) : (
-              <span className="text-sm text-slate">
+              <span className="text-sm text-slate-500 dark:text-slate-400">
                 Last scanned {selEnv.scanned_at ? new Date(selEnv.scanned_at).toLocaleString() : "—"}
               </span>
             )
@@ -185,19 +192,19 @@ export default function OverviewPage() {
 
       {/* Agent table with a highlighted header bar. */}
       <div className="card overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 bg-orange/10 border-b-2 border-orange">
-          <h2 className="font-semibold text-ink">
+        <div className="flex items-center justify-between px-5 py-3 bg-brand-50 dark:bg-brand-500/10 border-b-2 border-brand-500">
+          <h2 className="font-semibold text-slate-900 dark:text-slate-100">
             {title}
-            <span className="ml-2 text-sm font-normal text-slate">
+            <span className="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400">
               — {isAll ? "agents across every environment" : "agents in this environment"}
             </span>
           </h2>
-          <span className="text-sm font-medium text-ink">{agents.length} agent(s)</span>
+          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{agents.length} agent(s)</span>
         </div>
         {selProgress && (
-          <div className="h-1 bg-track">
+          <div className="h-1 bg-slate-200 dark:bg-slate-700">
             <div
-              className="h-1 bg-orange transition-all"
+              className="h-1 bg-brand-600 transition-all"
               style={{
                 width: `${selProgress.agent_count ? (selProgress.agents_done / selProgress.agent_count) * 100 : 8}%`,
               }}
@@ -207,7 +214,7 @@ export default function OverviewPage() {
         <div className="p-5 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-slate border-b border-line">
+              <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
                 <Th label="Agent" k="agent_name" />
                 {isAll && <Th label="Environment" k="environment_name" />}
                 <Th label="Solution" k="solution_name" />
@@ -220,7 +227,7 @@ export default function OverviewPage() {
               {sorted.map((a) => (
                 <tr
                   key={`${a.environment_id}-${a.bot_id || a.agent_name}`}
-                  className="border-b border-line hover:bg-mist/50 cursor-pointer"
+                  className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 cursor-pointer"
                   onClick={() =>
                     a.bot_id &&
                     nav(
@@ -228,12 +235,12 @@ export default function OverviewPage() {
                     )
                   }
                 >
-                  <td className="py-2 pr-3 font-medium text-ink">{a.agent_name}</td>
-                  {isAll && <td className="py-2 pr-3 text-slate">{a.environment_name}</td>}
-                  <td className="py-2 pr-3 text-slate">
+                  <td className="py-2 pr-3 font-medium text-slate-900 dark:text-slate-100">{a.agent_name}</td>
+                  {isAll && <td className="py-2 pr-3 text-slate-500 dark:text-slate-400">{a.environment_name}</td>}
+                  <td className="py-2 pr-3 text-slate-500 dark:text-slate-400">
                     {a.solution_name || <span className="text-fail">default solution</span>}
                   </td>
-                  <td className="py-2 pr-3 text-slate capitalize">{a.publish_state || "–"}</td>
+                  <td className="py-2 pr-3 text-slate-500 dark:text-slate-400 capitalize">{a.publish_state || "–"}</td>
                   <td className="py-2 pr-3">
                     <ScoreBar score={a.score} />
                   </td>
@@ -244,7 +251,7 @@ export default function OverviewPage() {
               ))}
               {agents.length === 0 && (
                 <tr>
-                  <td colSpan={isAll ? 6 : 5} className="py-6 text-center text-slate">
+                  <td colSpan={isAll ? 6 : 5} className="py-6 text-center text-slate-500 dark:text-slate-400">
                     No agents.
                   </td>
                 </tr>
