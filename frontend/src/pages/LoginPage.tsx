@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useAuth } from "../auth/AuthContext";
 import CopilotStudioLogo from "../components/CopilotStudioLogo";
 
@@ -9,61 +9,128 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const submit = async (e: FormEvent) => {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
       await login(username, password);
-    } catch (err) {
-      setError((err as Error).message === "unauthorized" ? "Invalid credentials" : "Incorrect username or password");
+    } catch {
+      setError("Sign in failed");
     } finally {
       setBusy(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-full grid place-items-center p-6">
-      <div className="card p-8 w-full max-w-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <CopilotStudioLogo size={36} />
-          <h1 className="font-semibold text-lg text-ink">Agent Quality Platform</h1>
+    <div className="flex h-full w-full">
+      {/* Brand panel */}
+      <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500 p-12 text-white lg:flex">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-20"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 20%, white 0, transparent 40%), radial-gradient(circle at 80% 60%, white 0, transparent 35%)",
+          }}
+        />
+        <div className="relative flex items-center gap-3">
+          <CopilotStudioLogo size={44} className="drop-shadow" />
+          <span className="text-lg font-semibold">
+            Copilot Studio Agent Quality Reporter
+          </span>
         </div>
+        <div className="relative max-w-md">
+          <h1 className="text-3xl font-semibold leading-tight">
+            Find out which of your agents are actually any good
+          </h1>
+          <p className="mt-4 text-brand-100">
+            Every Copilot Studio agent scored against a weighted catalogue of patterns and
+            practices, with an optional LLM judge for instruction quality — across all your
+            Power Platform environments.
+          </p>
+        </div>
+        <div className="relative text-sm text-brand-100/80">
+          Community project · MIT-licensed
+        </div>
+      </div>
 
-        {entraAvailable && (
-          <>
-            <button
-              onClick={() => loginEntra().catch((e) => setError((e as Error).message))}
-              className="w-full mb-4 py-2 rounded-lg bg-strong text-white font-medium hover:opacity-90"
-            >
-              Sign in with Microsoft Entra ID
-            </button>
-            <div className="text-center text-xs text-slate mb-4">or use an admin account</div>
-          </>
-        )}
+      {/* Sign-in panel */}
+      <div className="flex w-full items-center justify-center px-6 lg:w-1/2">
+        <form onSubmit={onSubmit} className="w-full max-w-sm">
+          <div className="mb-8 flex flex-col items-center text-center lg:hidden">
+            <CopilotStudioLogo size={56} />
+            <div className="mt-3 text-lg font-semibold text-brand-600 dark:text-brand-500">
+              Copilot Studio Agent Quality Reporter
+            </div>
+          </div>
 
-        <form onSubmit={submit} className="space-y-3">
+          <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+            Welcome back
+          </h2>
+          <p className="mb-6 mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Sign in to continue.
+          </p>
+
+          {entraAvailable && (
+            <>
+              <button
+                type="button"
+                onClick={() => loginEntra().catch((e) => setError((e as Error).message))}
+                className="btn-primary w-full"
+              >
+                Sign in with Microsoft
+              </button>
+              <div className="my-5 flex items-center gap-3 text-xs text-slate-400">
+                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                or admin sign-in
+                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+              </div>
+            </>
+          )}
+
+          <label
+            htmlFor="username"
+            className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
+          >
+            Username
+          </label>
           <input
-            className="w-full border border-hairline rounded-lg px-3 py-2"
-            placeholder="Username"
+            id="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoFocus
+            autoComplete="username"
+            className="input mb-4"
           />
+
+          <label
+            htmlFor="password"
+            className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
+          >
+            Password
+          </label>
           <input
-            className="w-full border border-hairline rounded-lg px-3 py-2"
+            id="password"
             type="password"
-            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            className="input mb-6"
           />
-          {error && <div className="text-fail text-sm">{error}</div>}
-          <button
-            disabled={busy}
-            className="w-full py-2 rounded-lg bg-orange text-white font-medium hover:opacity-90 disabled:opacity-50"
-          >
+
+          {error && (
+            <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+              {error}
+            </div>
+          )}
+
+          <button type="submit" disabled={busy} className="btn-primary w-full">
             {busy ? "Signing in…" : "Sign in"}
           </button>
+
+          <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500">
+            Protected by your admin password · Entra SSO optional
+          </p>
         </form>
       </div>
     </div>

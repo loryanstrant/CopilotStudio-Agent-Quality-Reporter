@@ -1,19 +1,58 @@
 # Copilot Studio Agent Quality Reporter
 
-A self-contained, containerised platform that scores the quality of your **Microsoft Copilot Studio agents** against a catalogue of patterns & practices — and serves it as a modern web dashboard instead of a static report.
-
-It reads your agents **live from the Dataverse Web API** (app-only / client credentials), applies a weighted rule catalogue plus an optional LLM "instruction quality" judge, and presents per-agent scorecards, findings, and history across all of your Power Platform environments. Runs anywhere via Docker and deploys to Azure Container Apps with one click.
-
-## Deploy to Azure (one click)
+Self-hosted quality scoring for your **Microsoft Copilot Studio agents**. It reads agents live
+from the Dataverse Web API, applies a weighted, editable catalogue of patterns and practices plus
+an optional LLM instruction-quality judge, and serves per-agent scorecards, findings and history
+across every Power Platform environment — instead of a static report. No data leaves your
+subscription. Runs anywhere with `docker compose up`, or deploys to Azure Container Apps in one
+click.
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Floryanstrant%2FAgentQualityReporter%2Fmain%2Finfra%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Floryanstrant%2FAgentQualityReporter%2Fmain%2Finfra%2FcreateUiDefinition.json)
 
-The button provisions everything into a resource group of your choice: a PostgreSQL flexible server, a Container Apps environment, and the **api** + **worker** container apps (pulled as prebuilt public images from GitHub Container Registry). You only enter an **admin password** — the database password and encryption keys are generated for you. When the deployment finishes, open the `dashboardUrl` output, sign in, and complete the in-app **Admin** page to connect your Dataverse service principal.
+> Community project, MIT-licensed. Not covered by a Microsoft support agreement.
+## Screenshots
 
-> **Maintainers:** the button relies on public images. After the first run of the
-> **Publish container images** workflow, set both GHCR packages
-> (`agentqualityreporter/api` and `.../worker`) to **Public** once, so Container Apps can pull
-> them anonymously. See [`docs/deploy.md`](docs/deploy.md) for the full walkthrough.
+### Overview — every agent, every environment
+
+Pick an environment from the selector, or leave it on **All environments** to see every agent across your tenant, sorted by score. Each row shows the owning solution (display name), publish state, score bar, and grade.
+
+![Overview](docs/screenshots/overview.png)
+
+### Agent scorecard
+
+A full breakdown for one agent: score gauge, metadata (created/modified, human creator, model, environment), deep links straight into **Copilot Studio** and the **maker portal**, every rule finding with its explanation and patterns-&-practices reference, live telemetry (when App Insights is connected), and the LLM instruction-quality judge.
+
+![Agent detail](docs/screenshots/agent-detail.png)
+
+### Settings
+
+Password-protected console: manage environments (add, **edit**, test, scan, delete), scan all environments at once, configure the Dataverse service principal and LLM judge, and open the editable rules catalogue. The version/build stamp and a guided setup wizard live here too.
+
+![Admin](docs/screenshots/admin.png)
+
+### About
+
+App version/build, a plain-English explainer of how scoring works, and credits with links.
+
+![About](docs/screenshots/about.png)
+
+### Dark mode
+
+Every page supports a light and dark theme.
+
+![Overview in dark mode](docs/screenshots/overview-dark.png)
+
+
+## Deploy to Azure (one click)
+
+The button provisions everything into a resource group of your choice: a PostgreSQL flexible
+server, a Container Apps environment, and the **api** + **worker** container apps (pulled as
+prebuilt public images from GitHub Container Registry). You only enter an **admin password** — the
+database password and encryption keys are generated for you. When the deployment finishes, open the
+`dashboardUrl` output, sign in, and complete the in-app **Settings** page to connect your Dataverse
+service principal.
+
+To deploy from source with `azd` instead, see [`docs/deploy.md`](docs/deploy.md).
 
 ## After it's deployed
 
@@ -26,15 +65,15 @@ scheduled scanning in the background). You can also get the URL from the api Con
 **2. Sign in.** Username is what you set as **admin username** (default `admin`); password is the
 **admin password** you chose at deploy time. The admin console is always password-protected.
 
-**3. Connect your Dataverse service principal.** Go to **Admin**. The setup guide walks you through
+**3. Connect your Dataverse service principal.** Go to **Settings**. The setup guide walks you through
 creating one Entra **app registration** with the **Dynamics CRM `user_impersonation`** application
 permission, then registering it as an **application user** (with a role that can read bots, bot
 components, and solutions) in each environment you scan. Paste **Tenant ID**, **Client ID**, and
 **Client secret**. Optionally add an **Azure OpenAI / Foundry** base URL, model, and key to enable
 the LLM instruction-quality judge.
 
-**4. Add environments and scan.** On **Admin**, **Add environment** → paste its Dataverse org URL
-(e.g. `https://org.crm.dynamics.com`) → **Test** → **Scan now** (or **Scan all environments**). The
+**4. Add environments and scan.** On **Settings**, **Add environment** → paste its Dataverse org URL
+(e.g. `https://org.crm.dynamics.com`) → **Test** → **Run now** (or **Run all environments**). The
 environment card shows the last-scan time and agent count; the Overview page shows live scan
 progress. You can **Edit** an environment later to rename it or add Application Insights details.
 
@@ -76,43 +115,12 @@ Full details: [`docs/deploy.md`](docs/deploy.md#entra-single-sign-on-optional).
 ### Where to find run history, logs, and errors
 
 - **In the app:** the **Overview** page shows live scan progress; **History** shows past scans with
-  scores; each environment card on **Admin** shows its last-scan time and agent count.
-- **Container logs (the real detail):** manual **Scan now** / **Scan all** run inside the
+  scores; each environment card on **Settings** shows its last-scan time and agent count.
+- **Container logs (the real detail):** manual **Run now** / **Scan all** run inside the
   **`…-api-…`** Container App — open it → **Monitoring → Log stream** (live), or **Logs** to query
   `ContainerAppConsoleLogs_CL`. Scheduled background scans run in the **`…-worker-…`** Container App —
   check its log stream for scheduled-run errors.
 
-## Screenshots
-
-### Overview — every agent, every environment
-
-Pick an environment from the selector, or leave it on **All environments** to see every agent across your tenant, sorted by score. Each row shows the owning solution (display name), publish state, score bar, and grade.
-
-![Overview](docs/screenshots/overview.png)
-
-### Agent scorecard
-
-A full breakdown for one agent: score gauge, metadata (created/modified, human creator, model, environment), deep links straight into **Copilot Studio** and the **maker portal**, every rule finding with its explanation and patterns-&-practices reference, live telemetry (when App Insights is connected), and the LLM instruction-quality judge.
-
-![Agent detail](docs/screenshots/agent-detail.png)
-
-### Admin
-
-Password-protected console: manage environments (add, **edit**, test, scan, delete), scan all environments at once, configure the Dataverse service principal and LLM judge, and open the editable rules catalogue. The version/build stamp and a guided setup wizard live here too.
-
-![Admin](docs/screenshots/admin.png)
-
-### About
-
-App version/build, a plain-English explainer of how scoring works, and credits with links.
-
-![About](docs/screenshots/about.png)
-
-### Dark mode
-
-Every page supports a light and dark theme.
-
-![Overview in dark mode](docs/screenshots/overview-dark.png)
 
 ## What it scores
 
@@ -126,27 +134,57 @@ Every rule is **editable** from the Rules page: enable/disable it, change its sc
 
 > **Application Insights (AGT-007):** Copilot Studio stores the App Insights connection outside Dataverse, and its bot-management API rejects app-only tokens, so a service-principal scan can't read it. This rule is therefore **manual-review** — it never fails on absence. Connect an environment's App Insights in Admin and telemetry is confirmed automatically.
 
-## Stack
+## Prerequisites & permissions
 
-- **Backend / engine:** Python 3.12, FastAPI, SQLAlchemy 2.x (async), Alembic, httpx, MSAL,
-  APScheduler, Pydantic v2, psycopg v3.
-- **Database:** PostgreSQL 16 (schema via Alembic).
-- **Frontend:** React + Vite + TypeScript + Tailwind.
-- **Packaging:** Docker + docker-compose. Deploy: one-click ARM (GHCR images) or `azd` + Bicep → Azure Container Apps.
+- A **Power Platform Administrator** to register an application user in each environment you want
+  to scan.
+- A **Global Administrator** (or Application Administrator) only if you want the optional Entra
+  group gate on viewer sign-in.
+- Optionally an **Azure OpenAI** deployment for the LLM instruction-quality judge. Rule-based
+  scoring works without it.
+- PowerShell 7 with the Microsoft Graph SDK, or the Power Platform CLI.
 
-## Repo layout
+Agents are read **live from the Dataverse Web API** using a service principal. That access is
+granted per environment by registering the app as an **application user** — it is not a Graph
+permission. It needs read access to these tables:
 
+| Table | Why |
+| --- | --- |
+| Bot | The agents themselves — name, description, instructions, publish state. |
+| Bot Component | Topics, knowledge sources and other components used for scoring. |
+| Connection Reference | Detects connections used by the agent. |
+| Environment Variable Definition | Detects configuration handling. |
+| Solution | Solution hygiene rules (managed/unmanaged, publisher prefix). |
+
+Directory.Read.All on Microsoft Graph is needed **only** if you restrict dashboard viewers to an
+Entra security group.
+
+Setup is two parts, both scripted. The in-app **Setup guide** page and the Settings wizard carry
+copy-paste scripts for each:
+
+**Part A — create the app registration** (Microsoft Graph PowerShell). Creates the registration,
+grants consent for the optional Graph permission, creates a client secret, and prints the Tenant ID,
+Client ID and secret.
+
+**Part B — register it per environment** (Power Platform CLI):
+
+```powershell
+# Power Platform CLI (pac). Install: https://aka.ms/PowerPlatformCLI
+# Run once per environment you want to scan. Requires Power Platform admin rights.
+pac auth create
+pac admin list                 # copy the Environment ID you want to scan
+
+pac admin create-service-principal \
+  --environment <ENVIRONMENT-ID> \
+  --role "System Administrator"
+
+# Prints: Application (client) ID, Tenant ID, and Client secret.
+# 'System Administrator' is convenient for a lab; scope to a least-privilege
+# custom role (read on the tables listed above) for production.
 ```
-/api         FastAPI: routes, auth, admin, reports, serves the built frontend
-/worker      live Dataverse collector, scan runner, scheduler, App Insights telemetry
-/engine      rule catalogue + scoring engine + LLM judge (the quality "brain")
-/shared      SQLAlchemy models, db session, config, crypto, migrations helper
-/frontend    React + Vite app
-/infra       one-click ARM template + createUiDefinition + Bicep (azd)
-/tests       pytest
-docker-compose.yml
-.env.example
-```
+
+You can do Part B in the Power Platform admin centre instead, under **Environment → Settings →
+Users + permissions → Application users → New app user**.
 
 ## Quick start (local)
 
@@ -163,33 +201,21 @@ docker compose up --build
 - **Dashboard (web UI):** http://localhost:5173
 - **API + Swagger docs:** http://localhost:8000/docs
 - **API health check:** http://localhost:8000/health
-- **Postgres:** localhost:5432 (user/pass/db all `agentquality` by default)
 
-> **Custom ports:** if 5432 / 8000 / 5173 clash with another stack, set `DB_PORT`,
-> `API_PORT`, and/or `FRONTEND_PORT` in `.env` before `docker compose up`. Only the
-> host-side ports change; the container-internal ports (and the deployed Azure app)
-> are unaffected. For example `FRONTEND_PORT=5273` serves the dashboard at
-> http://localhost:5273.
-
-On first start an admin login is seeded from `ADMIN_USERNAME` / `ADMIN_PASSWORD`
-in `.env` (defaults `admin` / `change-me` — change these). Sign in, open **Admin**,
-add an environment (its Dataverse URL), enter your service-principal credentials,
-**Test connection**, then **Scan now** (or **Scan all environments**).
+On first start an admin login is seeded from `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env`
+(defaults `admin` / `change-me` — change these).
 
 ## First-run checklist
 
 1. `docker compose up` (or deploy to Azure).
-2. Sign in with `ADMIN_USERNAME` / `ADMIN_PASSWORD` (seeded on first start).
-3. **Admin** → follow the guided setup wizard to create one Entra app registration and
-   register it as an application user in each environment.
-4. Enter Tenant ID, Client ID, Client Secret, and (optionally) the Azure OpenAI / Foundry
-   base URL, model, and key for the LLM instruction judge.
-5. **Add environment** → paste its Dataverse org URL → **Test** → **Scan now**.
-6. Explore the dashboard; open an agent to see its full scorecard.
+2. Sign in with `ADMIN_USERNAME` / `ADMIN_PASSWORD` (seeded automatically on first start).
+3. **Settings** → follow the guided wizard for Part A, then enter Tenant ID, Client ID and Client
+   secret and **Save**.
+4. Add each environment (display name + Dataverse org URL), run Part B for it, then **Test**.
+5. **Run now** for one environment, or **Run all environments**.
+6. Optionally configure Azure OpenAI to enable the LLM judge, and tune weights on **Rules**.
 
-The Dataverse app registration needs the **Dynamics CRM `user_impersonation`** application
-permission and must be added as an **application user** with a security role that can read
-bots, bot components, and solutions in each environment you scan.
+Just evaluating? Skip steps 3–5 and use **Settings → Demo data → Load demo data** instead.
 
 ## Authentication
 
@@ -198,33 +224,21 @@ bots, bot components, and solutions in each environment you scan.
   Easy Auth gates the dashboard behind Microsoft Entra ID so licensed users can view it with
   their work account. See [docs/deploy.md](docs/deploy.md#entra-single-sign-on-optional).
 
-## Running tests
 
-```powershell
-pip install -e ".[dev]"
-pytest
-```
+## Data & privacy notes
 
-Tests run against an isolated SQLite database (no Postgres required). Inside the
-running stack you can also run `docker compose exec api python -m pytest`.
+- Agent **instructions and descriptions** are read from Dataverse for scoring. If the LLM judge is
+  enabled, instruction text is sent to **your own** Azure OpenAI deployment — never to any
+  third-party service. Disable the judge and nothing leaves your subscription at all.
+- The Dataverse **client secret** and the Azure OpenAI **key** are encrypted at rest with a Fernet
+  key and are write-only in the API: they can be set and replaced, never read back.
+- Scores are about **agent quality and hygiene**, not the people who built them. Creator names are
+  shown so you know who to help, not to rank anyone.
+- Application Insights (AGT-007) is always manual-review: Copilot Studio stores that connection
+  outside Dataverse, so a service-principal scan cannot confirm it either way.
+- Demo data is clearly labelled as such in Settings, and is only ever created or removed by an
+  explicit action.
 
-## Deploy to Azure (azd, build from source)
+## License
 
-Prefer building from source instead of the one-click images? Infrastructure is defined in
-`/infra` and `azure.yaml`.
-
-```powershell
-azd env set POSTGRES_ADMIN_PASSWORD "<strong-password>"
-azd env set FERNET_KEY "<fernet-key>"
-azd env set SECRET_KEY "<random-secret>"
-azd env set ADMIN_PASSWORD "<admin-password>"
-
-azd up      # provision + build + deploy
-azd down    # tear everything down
-```
-
-The API container serves the built React bundle, so the deployed app is a single
-public endpoint. Swap `DATABASE_URL` to any Postgres to move the database.
-
-> `FERNET_KEY` may be any non-empty string — a proper Fernet key is used as-is, anything else is
-> hashed into a valid key. This is what lets the one-click template auto-generate it.
+MIT. Community project — no Microsoft support agreement or SLA.

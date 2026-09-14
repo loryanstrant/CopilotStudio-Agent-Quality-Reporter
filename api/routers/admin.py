@@ -335,3 +335,39 @@ async def status(session: AsyncSession = Depends(get_session)) -> StatusOut:
         agents=agents,
         last_scan=last_out,
     )
+
+
+@router.post("/seed-demo", response_model=ScanRunOut)
+async def seed_demo(agents: int = 18, reset: bool = True) -> ScanRunOut:
+    """Seed synthetic agent-quality data so the dashboards render without Dataverse.
+
+    Explicit action only — nothing is ever seeded automatically on deploy.
+    Credentials and app user accounts are never touched.
+    """
+    from scripts.seed_demo import seed
+
+    agents = max(1, min(agents, 200))
+    stats = await seed(agents=agents, reset=reset)
+    return ScanRunOut(
+        status="seeded",
+        detail=(
+            f"Seeded {stats['agents']} agents across {stats['environments']} environments "
+            f"with {stats['scans']} scans and {stats['findings']} findings."
+        ),
+    )
+
+
+@router.post("/clear-demo", response_model=ScanRunOut)
+async def clear_demo() -> ScanRunOut:
+    """Remove all seeded data, leaving credentials and accounts intact.
+
+    Run this before your first production scan so demo numbers can't be mistaken
+    for real ones.
+    """
+    from scripts.seed_demo import clear
+
+    await clear()
+    return ScanRunOut(
+        status="cleared",
+        detail="Demo data removed. Run now to scan your real environments.",
+    )

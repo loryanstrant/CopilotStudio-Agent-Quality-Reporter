@@ -15,9 +15,9 @@ function fmtDate(iso: string | null): string | null {
 function Meta({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-slate">{label}</dt>
-      <dd className={`text-ink ${mono ? "font-mono text-xs break-all" : ""}`}>
-        {value || <span className="text-slate">—</span>}
+      <dt className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</dt>
+      <dd className={`text-slate-900 dark:text-slate-100 ${mono ? "font-mono text-xs break-all" : ""}`}>
+        {value || <span className="text-slate-500 dark:text-slate-400">—</span>}
       </dd>
     </div>
   );
@@ -25,7 +25,7 @@ function Meta({ label, value, mono }: { label: string; value: string | null; mon
 
 function HistoryChart({ data }: { data: HistoryPoint[] }) {
   if (data.length < 2)
-    return <div className="text-sm text-slate">Only one scan so far — history builds up daily.</div>;
+    return <div className="text-sm text-slate-500 dark:text-slate-400">Only one scan so far — history builds up daily.</div>;
   const w = 520;
   const h = 110;
   const xs = (i: number) => (i / (data.length - 1)) * (w - 20) + 10;
@@ -34,7 +34,16 @@ function HistoryChart({ data }: { data: HistoryPoint[] }) {
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full">
       {[0, 40, 60, 75, 90].map((g) => (
-        <line key={g} x1={10} x2={w - 10} y1={ys(g)} y2={ys(g)} stroke="var(--track)" strokeWidth="1" />
+        <line
+          key={g}
+          x1={10}
+          x2={w - 10}
+          y1={ys(g)}
+          y2={ys(g)}
+          stroke="currentColor"
+          className="text-slate-200 dark:text-slate-700"
+          strokeWidth="1"
+        />
       ))}
       <polyline points={pts} fill="none" stroke="#ff5800" strokeWidth="2.5" />
       {data.map((d, i) => (
@@ -68,7 +77,7 @@ export default function AgentDetailPage() {
   }, [botId, scanId]);
 
   if (err) return <div className="text-fail">{err}</div>;
-  if (!detail) return <div className="text-slate">Loading…</div>;
+  if (!detail) return <div className="text-slate-500 dark:text-slate-400">Loading…</div>;
 
   const findings = detail.findings.filter((f) => {
     if (filter === "all") return true;
@@ -79,19 +88,19 @@ export default function AgentDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link to={backTo} className="text-sm text-slate hover:text-ink">
+      <Link to={backTo} className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
         ← All agents
       </Link>
 
       <div className="card p-6 flex flex-col md:flex-row items-center gap-8">
         <ScoreGauge score={detail.score ?? 0} grade={detail.grade ?? "F"} />
         <div className="flex-1 w-full">
-          <div className="text-2xl font-semibold text-ink">{detail.agent_name}</div>
-          <div className="text-sm text-slate mt-1">
+          <div className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{detail.agent_name}</div>
+          <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Solution:{" "}
             {detail.solution_url ? (
               <a href={detail.solution_url} target="_blank" rel="noreferrer"
-                 className="text-ink underline decoration-dotted hover:decoration-solid">
+                 className="text-slate-900 dark:text-slate-100 underline decoration-dotted hover:decoration-solid">
                 {detail.solution_name}
               </a>
             ) : (
@@ -133,30 +142,30 @@ export default function AgentDetailPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card p-5">
-          <h3 className="font-semibold text-ink mb-3">Daily score history</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">Daily score history</h3>
           <HistoryChart data={history} />
         </div>
         <div className="card p-5">
-          <h3 className="font-semibold text-ink mb-3">Live telemetry</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">Live telemetry</h3>
           {detail.telemetry ? (
             <div className="grid grid-cols-3 gap-3 text-center">
               <div>
-                <div className="text-2xl font-bold text-ink">{detail.telemetry.run_count ?? "–"}</div>
-                <div className="text-xs text-slate">runs / {detail.telemetry.window_days}d</div>
+                <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{detail.telemetry.run_count ?? "–"}</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">runs / {detail.telemetry.window_days}d</div>
               </div>
               <div>
                 <div className="text-2xl font-bold text-fail">{detail.telemetry.error_count ?? "–"}</div>
-                <div className="text-xs text-slate">errors</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">errors</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-ink">
+                <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                   {detail.telemetry.p95_latency_ms ? `${Math.round(detail.telemetry.p95_latency_ms)}ms` : "–"}
                 </div>
-                <div className="text-xs text-slate">p95 latency</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">p95 latency</div>
               </div>
             </div>
           ) : (
-            <div className="text-sm text-slate">
+            <div className="text-sm text-slate-500 dark:text-slate-400">
               No Application Insights wired up for this environment.
             </div>
           )}
@@ -165,14 +174,14 @@ export default function AgentDetailPage() {
 
       <div className="card p-5">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-ink">Findings &amp; explanations</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100">Findings &amp; explanations</h3>
           <div className="flex gap-1">
             {["all", "fail", "pass", "skipped", "manual"].map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 className={`px-2.5 py-1 rounded-lg text-xs capitalize ${
-                  filter === f ? "bg-strong text-white" : "bg-mist text-slate hover:text-ink"
+                  filter === f ? "bg-brand-600 text-white" : "bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                 }`}
               >
                 {f}
@@ -184,8 +193,8 @@ export default function AgentDetailPage() {
       </div>
 
       <div className="card p-5">
-        <h3 className="font-semibold text-ink mb-3">LLM judge — instruction quality</h3>
-        {detail.judge ? <JudgeCard j={detail.judge} /> : <div className="text-sm text-slate">No judge result.</div>}
+        <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-3">LLM judge — instruction quality</h3>
+        {detail.judge ? <JudgeCard j={detail.judge} /> : <div className="text-sm text-slate-500 dark:text-slate-400">No judge result.</div>}
       </div>
     </div>
   );

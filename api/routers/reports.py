@@ -336,3 +336,47 @@ async def list_scans(limit: int = 50, session: AsyncSession = Depends(get_sessio
         }
         for s in rows
     ]
+
+
+@router.get("/freshness")
+async def freshness(session: AsyncSession = Depends(get_session)) -> dict:
+    """Data-freshness summary for the About page.
+
+    Counts of what has been scanned, the window covered, and the last run.
+    """
+    from sqlalchemy import func
+
+    from shared.models import JobRun
+
+    agents = await session.scalar(select(func.count()).select_from(Agent)) or 0
+    environments = await session.scalar(
+        select(func.count()).select_from(Environment).where(Environment.enabled.is_(True))
+    ) or 0
+    scans = await session.scalar(select(func.count()).select_from(Scan)) or 0
+    findings = await session.scalar(select(func.count()).select_from(Finding)) or 0
+
+    earliest_scan = await session.scalar(select(func.min(Scan.started_at)))
+    latest_scan = await session.scalar(select(func.max(Scan.finished_at)))
+
+    last = await session.scalar(select(JobRun).order_by(JobRun.started_at.desc()).limit(1))
+
+    def _iso(value) -> str | None:
+        return value.isoformat() if value else None
+
+    return {
+        "agents": int(agents),
+        "environments": int(environments),
+        "scans": int(scans),
+        "findings": int(findings),
+        "earliest_scan": _iso(earliest_scan),
+        "latest_scan": _iso(latest_scan),
+        "last_run": (
+            {
+                "status": last.status,
+                "started_at": _iso(last.started_at),
+                "finished_at": _iso(last.finished_at),
+            }
+            if last
+            else None
+        ),
+    }

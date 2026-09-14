@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { api } from "../api/client";
 import { AppConfig, Environment } from "../api/types";
 import SetupWizard from "../components/SetupWizard";
+import DemoDataCard from "../components/DemoDataCard";
 
 function Field({
   label,
@@ -10,10 +11,10 @@ function Field({
 }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className="block">
-      <span className="text-sm text-slate">{label}</span>
+      <span className="text-sm text-slate-500 dark:text-slate-400">{label}</span>
       <input
         {...props}
-        className="mt-1 w-full border border-hairline rounded-lg px-3 py-2 text-sm"
+        className="mt-1 w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm"
       />
     </label>
   );
@@ -177,23 +178,31 @@ export default function AdminPage() {
     }
   };
 
-  if (!cfg) return <div className="text-slate">Loading…</div>;
+  if (!cfg) return <div className="text-slate-500 dark:text-slate-400">Loading…</div>;
 
   return (
     <div className="space-y-6">
-      {msg && <div className="card p-3 text-sm text-ink border-l-4 border-orange">{msg}</div>}
+      <div>
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Connect your Power Platform environments, configure the optional LLM judge, and
+          run scans.
+        </p>
+      </div>
+
+      {msg && <div className="card p-3 text-sm text-slate-900 dark:text-slate-100 border-l-4 border-brand-500">{msg}</div>}
 
       <div className="card p-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-ink">Status</h3>
-            <p className="text-sm text-slate mt-1">
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100">Status</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
               Service principal {cfg.configured ? "✓ configured" : "✗ not configured"} · LLM judge{" "}
               {cfg.judge_configured ? "✓ configured" : "✗ not configured"}
             </p>
             {about && (
-              <p className="text-xs text-slate mt-2">
-                Version <span className="font-semibold text-ink">{about.version}</span> · built{" "}
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                Version <span className="font-semibold text-slate-900 dark:text-slate-100">{about.version}</span> · built{" "}
                 {new Date(about.build_date).toLocaleDateString(undefined, {
                   year: "numeric", month: "short", day: "numeric",
                 })}
@@ -204,7 +213,7 @@ export default function AdminPage() {
           </div>
           <Link
             to="/rules"
-            className="px-4 py-2 rounded-lg border border-hairline hover:bg-mist text-ink text-sm font-medium"
+            className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm font-medium"
           >
             Manage rules →
           </Link>
@@ -213,20 +222,20 @@ export default function AdminPage() {
 
       <div className="card p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-ink">Environments</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100">Environments</h3>
           <button
             onClick={scanAll}
             disabled={busy || envs.length === 0}
-            className="px-4 py-2 rounded-lg bg-orange text-white text-sm font-medium hover:opacity-90 disabled:opacity-50"
+            className="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:opacity-90 disabled:opacity-50"
           >
-            Scan all environments
+            Run all environments
           </button>
         </div>
         <div className="space-y-2 mb-4">
           {envs.map((e) =>
             editingId === e.id ? (
-              <div key={e.id} className="border border-orange rounded-lg p-3 space-y-3">
-                <div className="text-xs font-semibold text-slate uppercase tracking-wide">
+              <div key={e.id} className="border border-brand-500 rounded-lg p-3 space-y-3">
+                <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                   Editing environment
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -242,20 +251,20 @@ export default function AdminPage() {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => saveEdit(e)} disabled={busy || !editForm.display_name} className="text-sm px-3 py-1.5 rounded-lg bg-orange text-white hover:opacity-90 disabled:opacity-50">
-                    Save changes
+                  <button onClick={() => saveEdit(e)} disabled={busy || !editForm.display_name} className="text-sm px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:opacity-90 disabled:opacity-50">
+                    Save
                   </button>
-                  <button onClick={cancelEdit} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg border border-hairline hover:bg-mist">
+                  <button onClick={cancelEdit} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700">
                     Cancel
                   </button>
                 </div>
               </div>
             ) : (
-              <div key={e.id} className="flex items-center gap-3 border border-line rounded-lg p-3">
+              <div key={e.id} className="flex items-center gap-3 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
                 <div className="flex-1">
-                  <div className="font-medium text-ink">{e.display_name}</div>
-                  <div className="text-xs text-slate">{e.dataverse_url || "no Dataverse URL"}</div>
-                  <div className="text-xs text-slate mt-0.5">
+                  <div className="font-medium text-slate-900 dark:text-slate-100">{e.display_name}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">{e.dataverse_url || "no Dataverse URL"}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     {e.app_insights_app_id || e.has_app_insights_key
                       ? "App Insights connected"
                       : "No App Insights"}
@@ -267,14 +276,14 @@ export default function AdminPage() {
                       : "Never scanned"}
                   </div>
                 </div>
-                <button onClick={() => startEdit(e)} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg border border-hairline hover:bg-mist">
+                <button onClick={() => startEdit(e)} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700">
                   Edit
                 </button>
-                <button onClick={() => testConn(e.id)} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg border border-hairline hover:bg-mist">
+                <button onClick={() => testConn(e.id)} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700">
                   Test
                 </button>
-                <button onClick={() => scanEnv(e.id)} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg bg-strong text-white hover:opacity-90">
-                  Scan now
+                <button onClick={() => scanEnv(e.id)} disabled={busy} className="text-sm px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:opacity-90">
+                  Run now
                 </button>
                 <button onClick={() => delEnv(e.id)} className="text-sm px-3 py-1.5 rounded-lg text-fail hover:bg-fail/10">
                   Delete
@@ -282,10 +291,10 @@ export default function AdminPage() {
               </div>
             )
           )}
-          {envs.length === 0 && <div className="text-sm text-slate">No environments yet.</div>}
+          {envs.length === 0 && <div className="text-sm text-slate-500 dark:text-slate-400">No environments yet.</div>}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t border-line pt-4">
-          <div className="md:col-span-2 text-xs font-semibold text-slate uppercase tracking-wide">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t border-slate-200 dark:border-slate-700 pt-4">
+          <div className="md:col-span-2 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
             Add a new environment
           </div>
           <Field label="Display name" value={env.display_name || ""} onChange={(e) => setEnv({ ...env, display_name: e.target.value })} />
@@ -293,7 +302,7 @@ export default function AdminPage() {
           <Field label="App Insights App ID (optional)" value={env.app_insights_app_id || ""} onChange={(e) => setEnv({ ...env, app_insights_app_id: e.target.value })} />
           <Field label="App Insights API key (optional)" type="password" value={env.app_insights_key || ""} onChange={(e) => setEnv({ ...env, app_insights_key: e.target.value })} />
           <div className="md:col-span-2">
-            <button onClick={addEnv} disabled={busy || !env.display_name} className="px-4 py-2 rounded-lg bg-strong text-white text-sm hover:opacity-90 disabled:opacity-50">
+            <button onClick={addEnv} disabled={busy || !env.display_name} className="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm hover:opacity-90 disabled:opacity-50">
               Add environment
             </button>
           </div>
@@ -301,8 +310,8 @@ export default function AdminPage() {
       </div>
 
       <div className="card p-5">
-        <h3 className="font-semibold text-ink mb-1">Service principal &amp; judge</h3>
-        <p className="text-sm text-slate mb-4">
+        <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1">Service principal &amp; judge</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
           Secrets are write-only and stored encrypted. Leave a secret blank to keep the existing value.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -315,10 +324,12 @@ export default function AdminPage() {
           <Field label={`Foundry API key ${cfg.has_aoai_key ? "(set)" : ""}`} type="password" placeholder="••••••" onChange={(e) => setForm({ ...form, aoai_key: e.target.value })} />
           <Field label="Scan every N hours (1–24)" type="number" min={1} max={24} defaultValue={String(cfg.schedule_interval_hours)} onChange={(e) => setForm({ ...form, schedule_interval_hours: e.target.value })} />
         </div>
-        <button onClick={saveConfig} disabled={busy} className="mt-4 px-4 py-2 rounded-lg bg-orange text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">
-          Save configuration
+        <button onClick={saveConfig} disabled={busy} className="mt-4 px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">
+          Save
         </button>
       </div>
+
+      <DemoDataCard />
 
       <SetupWizard defaultOpen={!cfg.configured} />
     </div>

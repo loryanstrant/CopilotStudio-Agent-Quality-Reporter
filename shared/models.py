@@ -1,4 +1,4 @@
-"""SQLAlchemy 2.0 ORM models for the Agent Quality Platform.
+"""SQLAlchemy 2.0 ORM models for the Copilot Studio Agent Quality Reporter.
 
 Postgres-specific column types (JSONB) fall back to portable JSON under SQLite so
 the test-suite can run without a Postgres instance.

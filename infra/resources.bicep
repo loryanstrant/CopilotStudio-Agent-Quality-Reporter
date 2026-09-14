@@ -12,7 +12,9 @@ param dbAdmin string
 param dbPassword string
 
 @secure()
-param appAdminPassword string
+param adminPassword string
+
+param adminUsername string = 'admin'
 
 var suffix = uniqueString(resourceGroup().id)
 var pgName = toLower('${name}pg${suffix}')
@@ -92,7 +94,7 @@ resource cae 'Microsoft.App/managedEnvironments@2024-03-01' = {
 
 var sharedSecrets = [
   { name: 'database-url', value: databaseUrl }
-  { name: 'app-admin-password', value: appAdminPassword }
+  { name: 'app-admin-password', value: adminPassword }
   { name: 'fernet-key', value: uniqueString(resourceGroup().id, 'fernet') }
   { name: 'secret-key', value: uniqueString(resourceGroup().id, 'jwt') }
 ]
@@ -125,7 +127,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
           image: '${name}/api:latest'
           resources: { cpu: json('0.5'), memory: '1Gi' }
           env: concat(sharedEnv, [
-            { name: 'ADMIN_USERNAME', value: 'admin' }
+            { name: 'ADMIN_USERNAME', value: adminUsername }
             { name: 'ADMIN_PASSWORD', secretRef: 'app-admin-password' }
           ])
         }

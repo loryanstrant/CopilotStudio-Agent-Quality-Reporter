@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
  *
  * By default this renders an original, gradient "ribbon" mark (our own artwork,
  * not Microsoft's proprietary logo file). If you have the rights to use the
- * official Copilot Studio logo, drop an SVG/PNG at `public/copilot-studio.svg`
+ * official Copilot Studio logo, drop an SVG/PNG at `public/app-logo.svg`
  * and it will be used automatically instead of the built-in mark.
  */
 export default function CopilotStudioLogo({
@@ -22,7 +22,7 @@ export default function CopilotStudioLogo({
     const img = new Image();
     img.onload = () => alive && setCustomOk(true);
     img.onerror = () => alive && setCustomOk(false);
-    img.src = "/copilot-studio.svg";
+    img.src = "/app-logo.svg";
     return () => {
       alive = false;
     };
@@ -31,7 +31,7 @@ export default function CopilotStudioLogo({
   if (customOk) {
     return (
       <img
-        src="/copilot-studio.svg"
+        src="/app-logo.svg"
         alt="Copilot Studio"
         width={size}
         height={size}

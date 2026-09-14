@@ -1,82 +1,88 @@
-import { ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { type ReactNode } from "react";
+import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../theme/ThemeContext";
 import CopilotStudioLogo from "./CopilotStudioLogo";
 
+function navClass({ isActive }: { isActive: boolean }): string {
+  return [
+    "block rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+    isActive
+      ? "bg-brand-600 text-white"
+      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white",
+  ].join(" ");
+}
+
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
-  const loc = useLocation();
-
-  const nav = [
-    { to: "/", label: "Overview" },
-    { to: "/history", label: "History" },
-    { to: "/about", label: "About" },
-    ...(user?.role === "admin" ? [{ to: "/settings", label: "Admin" }] : []),
-  ];
-
-  const active = (to: string) =>
-    to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(to);
+  const isAdmin = user?.role === "admin";
 
   return (
-    <div className="min-h-full flex flex-col">
-      <header className="bg-surface border-b border-line shadow-card sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <CopilotStudioLogo size={24} />
-            <span className="font-semibold text-ink">
-              Agent Quality <span className="text-slate font-normal">Platform</span>
-            </span>
+    <div className="flex h-full">
+      <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex items-center gap-3 px-5 py-5">
+          <CopilotStudioLogo size={32} className="shrink-0" />
+          <div>
+            <div className="text-sm font-semibold text-brand-600 dark:text-brand-500">
+              Copilot Studio
+            </div>
+            <div className="text-lg font-bold leading-tight text-slate-900 dark:text-white">
+              Agent Quality
+            </div>
           </div>
-          <nav className="flex gap-1">
-            {nav.map((n) => (
-              <Link
-                key={n.to}
-                to={n.to}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  active(n.to)
-                    ? "bg-mist text-ink"
-                    : "text-slate hover:text-ink hover:bg-mist/60"
-                }`}
-              >
-                {n.label}
-              </Link>
-            ))}
-          </nav>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-orange/15 text-orange grid place-items-center font-semibold uppercase">
-                {(user?.username || "?").charAt(0)}
-              </span>
-              <span className="text-ink whitespace-nowrap max-w-[220px] truncate" title={user?.username}>
-                {user?.username}
-              </span>
-              {user && user.role.toLowerCase() !== user.username.toLowerCase() && (
-                <span className="pill bg-mist text-slate whitespace-nowrap">{user.role}</span>
-              )}
+        </div>
+        <nav className="flex-1 space-y-1 px-3">
+          <NavLink to="/" className={navClass} end>
+            Overview
+          </NavLink>
+          <NavLink to="/history" className={navClass}>
+            History
+          </NavLink>
+          {isAdmin && (
+            <NavLink to="/rules" className={navClass}>
+              Rules
+            </NavLink>
+          )}
+          {isAdmin && (
+            <NavLink to="/settings" className={navClass}>
+              Settings
+            </NavLink>
+          )}
+          <NavLink to="/help" className={navClass}>
+            Setup guide
+          </NavLink>
+          <NavLink to="/about" className={navClass}>
+            About
+          </NavLink>
+        </nav>
+        <div className="space-y-3 border-t border-slate-200 px-4 py-4 text-sm dark:border-slate-700">
+          <button
+            onClick={toggle}
+            className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            <span>{theme === "dark" ? "Dark" : "Light"} mode</span>
+            <span aria-hidden>{theme === "dark" ? "🌙" : "☀️"}</span>
+          </button>
+          <div>
+            <div className="truncate font-medium text-slate-800 dark:text-slate-100" title={user?.username}>
+              {user?.username}
+            </div>
+            <div className="mb-3 text-xs uppercase tracking-wide text-slate-400">
+              {user?.role}
             </div>
             <button
-              onClick={toggle}
-              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              aria-label="Toggle theme"
-              className="w-9 h-9 grid place-items-center rounded-lg border border-hairline hover:bg-mist text-ink"
-            >
-              {theme === "dark" ? "☀️" : "🌙"}
-            </button>
-            <button
               onClick={logout}
-              className="px-3 py-1.5 rounded-lg border border-hairline hover:bg-mist text-ink whitespace-nowrap"
+              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
             >
               Sign out
             </button>
           </div>
         </div>
-      </header>
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-6">{children}</main>
-      <footer className="text-center text-xs text-slate py-4">
-        Copilot Studio Agent Quality Platform · findings trace to the Patterns &amp; Practices deck
-      </footer>
+      </aside>
+      <main className="min-w-0 flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-[1600px] px-8 py-8">{children}</div>
+      </main>
     </div>
   );
 }
