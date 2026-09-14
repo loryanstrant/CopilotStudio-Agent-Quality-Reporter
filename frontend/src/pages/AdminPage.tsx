@@ -27,6 +27,7 @@ export default function AdminPage() {
   const [about, setAbout] = useState<{ version: string; engine_version: string; catalogue_hash: string; build_date: string; build_time: string } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [redirectUri, setRedirectUri] = useState("");
 
   // config form state
   const [form, setForm] = useState<Record<string, string>>({});
@@ -40,6 +41,10 @@ export default function AdminPage() {
     setCfg(await api.get<AppConfig>("/admin/config"));
     setEnvs(await api.get<Environment[]>("/admin/environments"));
     api.get<typeof about>("/admin/about").then(setAbout).catch(() => {});
+    api
+      .get<{ redirect_uri: string }>("/auth/config")
+      .then((a) => setRedirectUri(a.redirect_uri))
+      .catch(() => {});
   };
   useEffect(() => {
     load().catch((e) => setMsg((e as Error).message));
@@ -327,6 +332,25 @@ export default function AdminPage() {
         <button onClick={saveConfig} disabled={busy} className="mt-4 px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">
           Save
         </button>
+      </div>
+
+      <div className="card p-5">
+        <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-1">
+          Sign in with Microsoft (optional)
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          Lets colleagues sign in with their work account as read-only viewers. It reuses the
+          service principal above, so there is nothing extra to create — you only need to register
+          the redirect URI below on the app registration, under{" "}
+          <span className="font-medium">Authentication → Web</span>. Administration stays behind the
+          admin password.
+        </p>
+        <Field
+          label="Redirect URI"
+          value={redirectUri}
+          readOnly
+          onFocus={(e) => e.currentTarget.select()}
+        />
       </div>
 
       <DemoDataCard />

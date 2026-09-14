@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     app_env: str = Field(default="development", alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     frontend_dist: str = Field(default="frontend/dist", alias="FRONTEND_DIST")
+    # Public origin of this deployment, e.g. https://aqp.contoso.com. Only needed
+    # when a reverse proxy hides the real address from the app; leave empty to
+    # derive it from the incoming request.
+    public_base_url: str = Field(default="", alias="PUBLIC_BASE_URL")
 
     # --- Scan tuning ------------------------------------------------------
     scan_concurrency: int = Field(default=8, alias="SCAN_CONCURRENCY")

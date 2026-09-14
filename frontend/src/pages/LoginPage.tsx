@@ -1,13 +1,26 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { api } from "../api/client";
 import CopilotStudioLogo from "../components/CopilotStudioLogo";
 
 export default function LoginPage() {
-  const { login, loginEntra, entraAvailable } = useAuth();
+  const { login, ssoError } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [entraEnabled, setEntraEnabled] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const cfg = await api.get<{ entra_enabled: boolean }>("/auth/config");
+        setEntraEnabled(cfg.entra_enabled);
+      } catch {
+        /* ignore: the Microsoft button simply stays hidden */
+      }
+    })();
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -71,15 +84,20 @@ export default function LoginPage() {
             Sign in to continue.
           </p>
 
-          {entraAvailable && (
+          {ssoError && (
+            <div
+              role="alert"
+              className="mb-5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-200"
+            >
+              {ssoError}
+            </div>
+          )}
+
+          {entraEnabled && (
             <>
-              <button
-                type="button"
-                onClick={() => loginEntra().catch((e) => setError((e as Error).message))}
-                className="btn-primary w-full"
-              >
+              <a href="/auth/oidc/start" className="btn-primary block w-full text-center">
                 Sign in with Microsoft
-              </button>
+              </a>
               <div className="my-5 flex items-center gap-3 text-xs text-slate-400">
                 <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
                 or admin sign-in

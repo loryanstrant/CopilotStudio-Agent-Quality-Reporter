@@ -92,23 +92,27 @@ progress. You can **Edit** an environment later to rename it or add Application 
 ### Enabling Entra ID single sign-on (optional)
 
 By default the dashboard is protected by the single admin password. You can additionally let
-colleagues sign in with their **work account** (read-only viewer) via **Container Apps Easy Auth** —
-administration stays behind the password. You can turn this on **at deploy time or later**.
+colleagues sign in with their **work account** (read-only viewer) — administration stays behind
+the password.
 
-**One-time prerequisite (either path):** an Entra **app registration** for sign-in (you can reuse the
-service-principal one). Note its **Application (client) ID**, create a **client secret**, and after
-deployment add the redirect URI `https://<your-dashboardUrl>/.auth/login/aad/callback` under
-**Authentication → Web**.
+Sign-in is performed by the app itself, so it works the same wherever you run it: Azure, Docker
+on a NAS, Kubernetes, anywhere. There is nothing to configure on the hosting platform.
 
-**Option A — at deploy time (recommended):** on the **Deploy to Azure** form, open the **Entra SSO**
-tab, tick **Enable Entra ID single sign-on**, and paste the app registration **client ID**, **client
-secret**, and (optional) **tenant ID**. Everything is wired up automatically; grab the
-**`entraRedirectUriToRegister`** deployment output and add it to the app registration as above.
+It reuses the **same app registration** you already entered for scanning, so there is no second
+set of credentials to manage:
 
-**Option B — after deployment:** open the **`…-api-…`** Container App → **Settings → Authentication**
-→ **Add identity provider** → **Microsoft**, use your app registration's client ID + secret, and set
-*unauthenticated requests* to **Allow** (the app still gates admin behind the password; SSO users
-become viewers). Add the redirect URI as above.
+1. Sign in as the admin and open **Settings**.
+2. Copy the **redirect URI** shown under *Sign in with Microsoft (optional)*.
+3. In the Entra portal, open your app registration → **Authentication → Add a platform → Web**,
+   and paste that redirect URI.
+4. Optionally set a **report access group ID** in Settings to restrict who can view the dashboard.
+   If you do, add a **groups** claim under **Token configuration** on the app registration.
+
+The sign-in page then shows a **"Sign in with Microsoft"** button.
+
+> **Behind a reverse proxy?** The app works out its own public address from the request. If your
+> proxy doesn't pass the standard forwarded headers, set `PUBLIC_BASE_URL` (for example
+> `https://aqp.contoso.com`) so the redirect URI is correct.
 
 Full details: [`docs/deploy.md`](docs/deploy.md#entra-single-sign-on-optional).
 
@@ -252,9 +256,9 @@ Just evaluating? Skip steps 3–5 and use **Settings → Demo data → Load demo
 ## Authentication
 
 - **Admin console** is always **password-protected** (JWT, seeded admin user).
-- **Entra single sign-on (optional)** — when enabled at deploy time, Azure Container Apps
-  Easy Auth gates the dashboard behind Microsoft Entra ID so licensed users can view it with
-  their work account. See [docs/deploy.md](docs/deploy.md#entra-single-sign-on-optional).
+- **Entra single sign-on (optional)** — the app runs the OpenID Connect sign-in itself, reusing the
+  service principal you already configured, so colleagues can view the dashboard with their work
+  account on any host. See [docs/deploy.md](docs/deploy.md#entra-single-sign-on-optional).
 
 
 ## Data & privacy notes

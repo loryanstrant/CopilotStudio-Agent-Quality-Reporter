@@ -76,59 +76,6 @@
         ]
       },
       {
-        "name": "sso",
-        "label": "Entra SSO (optional)",
-        "elements": [
-          {
-            "name": "ssoInfo",
-            "type": "Microsoft.Common.InfoBox",
-            "visible": true,
-            "options": {
-              "icon": "Info",
-              "text": "Optionally let licensed users open the dashboard with their Microsoft work account (Container Apps Easy Auth). The admin console stays password-protected regardless. Leave disabled to use only the admin password. When enabled, register an app and paste its client ID and secret below, then add the redirect URI shown in the deployment outputs."
-            }
-          },
-          {
-            "name": "enableEntraAuth",
-            "type": "Microsoft.Common.CheckBox",
-            "label": "Enable Entra ID single sign-on",
-            "toolTip": "Gate the dashboard behind Microsoft Entra ID sign-in."
-          },
-          {
-            "name": "entraClientId",
-            "type": "Microsoft.Common.TextBox",
-            "label": "Entra application (client) ID",
-            "toolTip": "Application (client) ID of the sign-in app registration.",
-            "visible": "[steps('sso').enableEntraAuth]",
-            "constraints": {
-              "required": "[steps('sso').enableEntraAuth]",
-              "validations": [
-                {
-                  "regex": "^[0-9a-fA-F-]{36}$",
-                  "message": "A GUID (application/client ID)."
-                }
-              ]
-            }
-          },
-          {
-            "name": "entraClientSecret",
-            "type": "Microsoft.Common.PasswordBox",
-            "label": {
-              "password": "Entra client secret",
-              "confirmPassword": "Confirm secret"
-            },
-            "toolTip": "A client secret for the sign-in app registration.",
-            "visible": "[steps('sso').enableEntraAuth]",
-            "constraints": {
-              "required": "[steps('sso').enableEntraAuth]"
-            },
-            "options": {
-              "hideConfirmation": true
-            }
-          }
-        ]
-      },
-      {
         "name": "advanced",
         "label": "Advanced",
         "elements": [
@@ -165,9 +112,6 @@
       "namePrefix": "[basics('namePrefix')]",
       "adminUsername": "[steps('app').adminUsername]",
       "adminPassword": "[steps('app').adminPassword]",
-      "enableEntraAuth": "[steps('sso').enableEntraAuth]",
-      "entraClientId": "[steps('sso').entraClientId]",
-      "entraClientSecret": "[steps('sso').entraClientSecret]",
       "imageTag": "[steps('advanced').imageTag]"
     }
   }

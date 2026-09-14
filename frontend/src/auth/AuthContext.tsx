@@ -8,9 +8,8 @@ interface User {
 interface AuthState {
   user: User | null;
   loading: boolean;
-  entraAvailable: boolean;
+  ssoError: string | null;
   login: (username: string, password: string) => Promise<void>;
-  loginEntra: () => Promise<void>;
   logout: () => void;
 }
 
@@ -26,16 +25,22 @@ interface TokenResp {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [entraAvailable, setEntraAvailable] = useState(false);
+  const [ssoError, setSsoError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      try {
-        const mode = await api.get<{ entra_available: boolean }>("/auth/mode");
-        setEntraAvailable(mode.entra_available);
-      } catch {
-        /* ignore */
+      // A completed Entra sign-in hands the token back in the URL fragment.
+      // Fragments never reach the server, so the token cannot appear in access
+      // logs or a Referer header. Consume it and strip it from the address bar.
+      const hash = window.location.hash;
+      if (hash.startsWith("#sso=")) {
+        setToken(decodeURIComponent(hash.slice("#sso=".length)));
+        window.history.replaceState(null, "", window.location.pathname);
+      } else if (hash.startsWith("#sso_error=")) {
+        setSsoError(decodeURIComponent(hash.slice("#sso_error=".length)));
+        window.history.replaceState(null, "", window.location.pathname);
       }
+
       if (getToken()) {
         try {
           const me = await api.get<User>("/auth/me");
@@ -54,19 +59,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser({ username: r.username, role: r.role });
   };
 
-  const loginEntra = async () => {
-    const r = await api.post<TokenResp>("/auth/entra");
-    setToken(r.access_token);
-    setUser({ username: r.username, role: r.role });
-  };
-
   const logout = () => {
     clearToken();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, entraAvailable, login, loginEntra, logout }}>
+    <AuthContext.Provider value={{ user, loading, ssoError, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
