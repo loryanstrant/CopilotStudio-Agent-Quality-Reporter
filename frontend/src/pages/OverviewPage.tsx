@@ -161,7 +161,7 @@ export default function OverviewPage() {
           <select
             value={selKey}
             onChange={(ev) => selectKey(ev.target.value)}
-            className="min-w-[280px] border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100"
+            className="input w-auto min-w-[280px] font-medium"
           >
             <option value={ALL}>All environments</option>
             {envs.map((e) => (
