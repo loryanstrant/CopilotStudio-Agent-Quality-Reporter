@@ -1,16 +1,29 @@
-"""Report routes (any authenticated user) — agent-first.
+"""Report routes — agent-first.
 
 The dashboard is organised around agents: pick an environment, see every agent
 with its own score/grade, click an agent for its findings + explanations + LLM
 judge + telemetry, and view that agent's daily score history.
+
+Routes are split by who may see what:
+
+``router`` — organisation-wide data (every environment, every agent). Gated by
+:func:`require_org_view`, so it needs both a valid token and membership of the
+configured organisation-view group (admins always pass).
+
+``common_router`` — data any signed-in user may see regardless of that group:
+build info and data freshness.
+
+``me_router`` — the personal view: the agents the signed-in person created.
+Every route derives the person from the token, never from a client-supplied
+parameter.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.auth import get_current_user
+from api.auth import CurrentUser, get_current_user, require_org_view
 from shared.db import get_session
 from shared.models import (
     Agent,
@@ -23,8 +36,14 @@ from shared.models import (
 )
 
 router = APIRouter(
+    prefix="/reports", tags=["reports"], dependencies=[Depends(require_org_view)]
+)
+
+common_router = APIRouter(
     prefix="/reports", tags=["reports"], dependencies=[Depends(get_current_user)]
 )
+
+me_router = APIRouter(prefix="/reports/me", tags=["reports", "personal"])
 
 
 async def _latest_scan_per_env(session: AsyncSession) -> dict[int | None, Scan]:
@@ -43,7 +62,7 @@ async def _latest_scan_per_env(session: AsyncSession) -> dict[int | None, Scan]:
     return latest
 
 
-@router.get("/about")
+@common_router.get("/about")
 async def about() -> dict:
     """App version metadata for the About page (any authenticated user)."""
     from engine.loader import ENGINE_VERSION, catalogue_hash
@@ -338,7 +357,7 @@ async def list_scans(limit: int = 50, session: AsyncSession = Depends(get_sessio
     ]
 
 
-@router.get("/freshness")
+@common_router.get("/freshness")
 async def freshness(session: AsyncSession = Depends(get_session)) -> dict:
     """Data-freshness summary for the About page.
 
@@ -380,3 +399,192 @@ async def freshness(session: AsyncSession = Depends(get_session)) -> dict:
             else None
         ),
     }
+
+# --------------------------------------------------------------------------- #
+# Personal view — "agents you created"
+#
+# This platform has no user dimension: the only trace of a person is the UPN
+# stamped on an agent by Copilot Studio. So "mine" means
+# ``agents.created_by_upn`` equal to the UPN in the caller's token, compared
+# case-insensitively because Dataverse and Entra disagree about casing in
+# practice.
+#
+# Every route below derives the person from the token. There is deliberately no
+# "which user?" parameter: if a caller could name the user, any viewer could
+# read someone else's agents by editing a URL.
+# --------------------------------------------------------------------------- #
+def _me_upn(user: CurrentUser) -> str:
+    """The signed-in person's UPN, or 404."""
+    if not user.upn:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "There is no personal view for this account. Sign in with your "
+                "work account to see the agents you created."
+            ),
+        )
+    return user.upn
+
+
+async def _my_agent_rows(session: AsyncSession, upn: str) -> list[Agent]:
+    """Agent metadata rows created by this person.
+
+    NULL ``created_by_upn`` never matches (``lower(NULL)`` is NULL), so an agent
+    with unknown provenance is nobody's rather than everybody's.
+    """
+    return list(
+        (
+            await session.execute(
+                select(Agent)
+                .where(func.lower(Agent.created_by_upn) == upn.lower())
+                .order_by(Agent.display_name)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def _latest_score(session: AsyncSession, bot_id: str) -> AgentScore | None:
+    """Most recent scored appearance of one agent, across all scans."""
+    return await session.scalar(
+        select(AgentScore)
+        .where(AgentScore.bot_id == bot_id)
+        .order_by(AgentScore.captured_at.desc(), AgentScore.id.desc())
+        .limit(1)
+    )
+
+
+async def _open_findings(session: AsyncSession, scan_id: int, agent_name: str) -> int:
+    return int(
+        await session.scalar(
+            select(func.count())
+            .select_from(Finding)
+            .where(
+                Finding.scan_id == scan_id,
+                Finding.agent_name == agent_name,
+                Finding.status == "fail",
+            )
+        )
+        or 0
+    )
+
+
+async def _my_agent_cards(session: AsyncSession, upn: str) -> list[dict]:
+    env_rows = {
+        e.id: e for e in (await session.execute(select(Environment))).scalars().all()
+    }
+    out: list[dict] = []
+    for agent in await _my_agent_rows(session, upn):
+        score_row = await _latest_score(session, agent.bot_id) if agent.bot_id else None
+        env_id = (
+            score_row.environment_id if score_row is not None else agent.environment_id
+        )
+        env = env_rows.get(env_id) if env_id is not None else None
+        out.append(
+            {
+                "bot_id": agent.bot_id,
+                "agent_name": (
+                    score_row.agent_name if score_row is not None else agent.display_name
+                ),
+                "solution_name": score_row.solution_name if score_row else None,
+                "publish_state": (
+                    score_row.publish_state if score_row else agent.publish_state
+                ),
+                "score": score_row.score if score_row else None,
+                "grade": score_row.grade if score_row else None,
+                "scan_id": score_row.scan_id if score_row else None,
+                "environment_id": env_id,
+                "environment_name": env.display_name if env else None,
+                "open_findings": (
+                    await _open_findings(session, score_row.scan_id, score_row.agent_name)
+                    if score_row is not None
+                    else 0
+                ),
+                "modified_on": (
+                    agent.modified_on.isoformat() if agent.modified_on else None
+                ),
+            }
+        )
+    return out
+
+
+@me_router.get("/summary")
+async def my_summary(
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Rollup over the agents this person created."""
+    cards = await _my_agent_cards(session, _me_upn(user))
+    scored = [c["score"] for c in cards if c["score"] is not None]
+    grades = [c["grade"] for c in cards if c["grade"]]
+    return {
+        "agents": len(cards),
+        "scored_agents": len(scored),
+        "avg_score": round(sum(scored) / len(scored)) if scored else None,
+        # Worst grade is the useful one to surface: it is what needs attention.
+        "worst_grade": max(grades) if grades else None,
+        "open_findings": sum(c["open_findings"] for c in cards),
+        "environments": len({c["environment_id"] for c in cards}),
+        "has_data": bool(cards),
+    }
+
+
+@me_router.get("/agents")
+async def my_agents(
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """Every agent this person created, with its latest score and open findings."""
+    return await _my_agent_cards(session, _me_upn(user))
+
+
+@me_router.get("/agents/{bot_id}")
+async def my_agent_detail(
+    bot_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    scan_id: int | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Full scorecard for one of this person's own agents.
+
+    ``bot_id`` names an agent rather than a user, but it is still somebody's
+    agent, so ownership is confirmed against the token first — otherwise
+    guessing ids would read other people's scorecards. A non-owner gets 404
+    rather than 403 so the endpoint does not confirm that the id exists.
+    """
+    upn = _me_upn(user)
+    agent = await session.scalar(
+        select(Agent).where(
+            Agent.bot_id == bot_id,
+            func.lower(Agent.created_by_upn) == upn.lower(),
+        )
+    )
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    if scan_id is None:
+        score_row = await _latest_score(session, bot_id)
+        if score_row is None:
+            raise HTTPException(status_code=404, detail="Agent has not been scored yet")
+        scan_id = score_row.scan_id
+    return await agent_detail(bot_id=bot_id, scan_id=scan_id, session=session)
+
+
+@me_router.get("/agents/{bot_id}/history")
+async def my_agent_history(
+    bot_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """Score history for one of this person's own agents."""
+    upn = _me_upn(user)
+    owned = await session.scalar(
+        select(Agent.id).where(
+            Agent.bot_id == bot_id,
+            func.lower(Agent.created_by_upn) == upn.lower(),
+        )
+    )
+    if owned is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return await agent_history(bot_id=bot_id, session=session)

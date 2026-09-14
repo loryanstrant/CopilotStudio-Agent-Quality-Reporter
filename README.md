@@ -116,6 +116,29 @@ The sign-in page then shows a **"Sign in with Microsoft"** button.
 
 Full details: [`docs/deploy.md`](docs/deploy.md#entra-single-sign-on-optional).
 
+### Your agents vs. the organisation view
+
+Anyone who signs in with their work account lands on **Your agents** — the agents Copilot Studio
+records *them* as the maker of, with each one's latest score and anything still open. The page is
+built entirely from the signed-in identity in the token: there is no "which user?" parameter
+anywhere in the personal API, because a parameter would let one viewer read another person's
+agents by editing a URL. Matching is on `created_by_upn`, compared case-insensitively (Dataverse
+and Entra do not agree on casing). Agents with no recorded maker belong to nobody.
+
+Stepping across to the **Organisation** view — every agent in every environment, plus scan history —
+is controlled by a separate **Organisation view group ID** in **Settings**:
+
+- **Leave it blank and the organisation view stays open** to everyone who can sign in. That is the
+  behaviour existing deployments already have, and upgrading must not lock anyone out.
+- Set it to an Entra group object ID and only members of that group (plus the password admin) can
+  see organisation-wide reporting. Everyone else keeps their own personal view, and the
+  organisation links are shown locked rather than hidden, so it is obvious what to ask for.
+
+It is deliberately **separate from the report access group ID**: that one decides who may sign in at
+all, this one decides who may see everyone else's data. Membership is checked on **every request**,
+never baked into the token, so removing someone from the group takes effect immediately rather
+than when their token expires.
+
 ### Where to find run history, logs, and errors
 
 - **In the app:** the **Overview** page shows live scan progress; **History** shows past scans with
@@ -259,6 +282,10 @@ Just evaluating? Skip steps 3–5 and use **Settings → Demo data → Load demo
 - **Entra single sign-on (optional)** — the app runs the OpenID Connect sign-in itself, reusing the
   service principal you already configured, so colleagues can view the dashboard with their work
   account on any host. See [docs/deploy.md](docs/deploy.md#entra-single-sign-on-optional).
+- **Personal view** — people who sign in with a work account see the agents they created, derived
+  from the token. **Organisation-wide** reporting is gated by the *Organisation view group ID*
+  (blank = open to everyone who can sign in). See
+  [Your agents vs. the organisation view](#your-agents-vs-the-organisation-view).
 
 
 ## Data & privacy notes

@@ -23,6 +23,12 @@ class TokenOut(BaseModel):
 class UserOut(BaseModel):
     username: str
     role: str
+    # Whether this user may see organisation-wide data. Drives whether the SPA
+    # offers the org view or shows it locked.
+    can_view_org: bool = True
+    # Whether there is an Entra identity to filter a personal view down to.
+    # False for the password admin, who therefore lands on the org view.
+    has_personal_view: bool = False
 
 
 class AuthConfigOut(BaseModel):
@@ -39,6 +45,7 @@ class AppConfigIn(BaseModel):
     aoai_model: str | None = None
     aoai_key: str | None = None  # write-only
     report_access_group_id: str | None = None
+    org_view_group_id: str | None = None
     schedule_interval_hours: int | None = Field(default=None, ge=1, le=24)
     default_icon_hashes: list[str] | None = None
 
@@ -51,6 +58,7 @@ class AppConfigOut(BaseModel):
     aoai_model: str | None = None
     has_aoai_key: bool = False
     report_access_group_id: str | None = None
+    org_view_group_id: str | None = None
     schedule_interval_hours: int = 24
     default_icon_hashes: list[str] = []
     configured: bool = False
