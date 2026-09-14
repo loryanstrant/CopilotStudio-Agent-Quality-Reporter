@@ -13,10 +13,35 @@ function navClass({ isActive }: { isActive: boolean }): string {
   ].join(" ");
 }
 
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+      {children}
+    </div>
+  );
+}
+
+/** An organisation link the signed-in person is not allowed to follow. Shown
+ *  disabled rather than removed, so the absence is explained rather than
+ *  mysterious. */
+function LockedNavItem({ label }: { label: string }) {
+  return (
+    <div
+      title="Organisation-wide reporting is limited to an approved group."
+      className="flex cursor-not-allowed items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-slate-400 dark:text-slate-500"
+    >
+      <span>{label}</span>
+      <span aria-hidden>🔒</span>
+    </div>
+  );
+}
+
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
   const isAdmin = user?.role === "admin";
+  const personal = Boolean(user?.has_personal_view);
+  const canViewOrg = Boolean(user?.can_view_org);
 
   return (
     <div className="flex h-full">
@@ -33,12 +58,39 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="flex-1 space-y-1 px-3">
-          <NavLink to="/" className={navClass} end>
-            Overview
-          </NavLink>
-          <NavLink to="/history" className={navClass}>
-            History
-          </NavLink>
+          {/* Two sections: what is yours, and what belongs to the organisation.
+              The organisation links stay visible but locked when the person is
+              outside the approved group — hiding them looks like a bug, and
+              says nothing about who to ask. */}
+          {personal && (
+            <>
+              <SectionLabel>You</SectionLabel>
+              <NavLink to="/" className={navClass} end>
+                Your agents
+              </NavLink>
+            </>
+          )}
+
+          <SectionLabel>Organisation</SectionLabel>
+          {canViewOrg ? (
+            <>
+              <NavLink to={personal ? "/org" : "/"} className={navClass} end>
+                Overview
+              </NavLink>
+              <NavLink to="/history" className={navClass}>
+                History
+              </NavLink>
+            </>
+          ) : (
+            <>
+              <LockedNavItem label="Overview" />
+              <LockedNavItem label="History" />
+              <p className="px-3 pb-1 pt-1 text-xs text-slate-400 dark:text-slate-500">
+                Limited to an approved group — ask your administrator.
+              </p>
+            </>
+          )}
+
           {isAdmin && (
             <NavLink to="/rules" className={navClass}>
               Rules

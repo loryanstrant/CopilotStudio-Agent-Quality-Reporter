@@ -4,6 +4,7 @@ import { useSetupStatus } from "./hooks/useSetupStatus";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import OverviewPage from "./pages/OverviewPage";
+import PersonalPage from "./pages/PersonalPage";
 import AgentDetailPage from "./pages/AgentDetailPage";
 import HistoryPage from "./pages/HistoryPage";
 import AdminPage from "./pages/AdminPage";
@@ -36,15 +37,37 @@ export default function App() {
   // dashboards and see the usual empty states.
   const needsSetup = checked && !configured && user.role === "admin";
 
+  // Organisation-wide pages are a server-side decision; this only stops the UI
+  // from parking someone on a page that will answer 403.
+  const org = (el: JSX.Element) =>
+    user.can_view_org ? el : <Navigate to="/" replace />;
+
+  // People signing in with a work account land on their own agents. Everyone
+  // else (the password admin, and anyone without a directory identity) lands on
+  // the organisation overview as before. A local account with neither is rare
+  // but must not bounce between redirects, so it gets a plain explanation.
+  const landing = user.has_personal_view ? (
+    <PersonalPage />
+  ) : user.can_view_org ? (
+    <OverviewPage />
+  ) : (
+    <div className="card p-6 text-sm text-slate-500 dark:text-slate-400">
+      Organisation-wide reporting is limited to an approved group, and this account has no
+      personal view. Ask your administrator if you need access.
+    </div>
+  );
+
   return (
     <Layout>
       <Routes>
         <Route
           path="/"
-          element={needsSetup ? <Navigate to="/settings" replace /> : <OverviewPage />}
+          element={needsSetup ? <Navigate to="/settings" replace /> : landing}
         />
+        <Route path="/me" element={<PersonalPage />} />
+        <Route path="/org" element={org(<OverviewPage />)} />
         <Route path="/agents/:botId" element={<AgentDetailPage />} />
-        <Route path="/history" element={<HistoryPage />} />
+        <Route path="/history" element={org(<HistoryPage />)} />
         <Route path="/help" element={<SetupGuidePage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route

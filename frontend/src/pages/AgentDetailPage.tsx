@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { AgentDetail, HistoryPoint } from "../api/types";
+import { useAuth } from "../auth/AuthContext";
 import ScoreGauge from "../components/ScoreGauge";
 import FindingsTable from "../components/FindingsTable";
 import JudgeCard from "../components/JudgeCard";
@@ -60,21 +61,29 @@ function HistoryChart({ data }: { data: HistoryPoint[] }) {
 
 export default function AgentDetailPage() {
   const { botId } = useParams();
+  const { user } = useAuth();
   const [sp] = useSearchParams();
   const scanId = sp.get("scan");
   const envParam = sp.get("env");
-  const backTo = envParam ? `/?env=${envParam}` : "/";
+  // Someone outside the organisation view group can still open their own
+  // agents, so read them through the personal routes, which check ownership
+  // from the token rather than trusting the id in the URL.
+  const personal = !user?.can_view_org;
+  const backTo = personal ? "/" : envParam ? `/?env=${envParam}` : "/";
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
-    if (!botId || !scanId) return;
+    if (!botId) return;
+    if (!personal && !scanId) return;
     const id = encodeURIComponent(botId);
-    api.get<AgentDetail>(`/reports/agents/${id}?scan_id=${scanId}`).then(setDetail).catch((e) => setErr((e as Error).message));
-    api.get<HistoryPoint[]>(`/reports/agents/${id}/history`).then(setHistory).catch(() => setHistory([]));
-  }, [botId, scanId]);
+    const base = personal ? `/reports/me/agents/${id}` : `/reports/agents/${id}`;
+    const detailUrl = scanId ? `${base}?scan_id=${scanId}` : base;
+    api.get<AgentDetail>(detailUrl).then(setDetail).catch((e) => setErr((e as Error).message));
+    api.get<HistoryPoint[]>(`${base}/history`).then(setHistory).catch(() => setHistory([]));
+  }, [botId, scanId, personal]);
 
   if (err) return <div className="text-fail">{err}</div>;
   if (!detail) return <div className="text-slate-500 dark:text-slate-400">Loading…</div>;
@@ -89,7 +98,7 @@ export default function AgentDetailPage() {
   return (
     <div className="space-y-6">
       <Link to={backTo} className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
-        ← All agents
+        {personal ? "← Your agents" : "← All agents"}
       </Link>
 
       <div className="card p-6 flex flex-col md:flex-row items-center gap-8">

@@ -93,6 +93,32 @@ export interface AgentDetail {
   telemetry: Telemetry | null;
 }
 
+/** One agent created by the signed-in person. The API derives "mine" from the
+ *  token, so there is no user id anywhere in these calls. */
+export interface MyAgentCard {
+  bot_id: string | null;
+  agent_name: string;
+  solution_name: string | null;
+  publish_state: string | null;
+  score: number | null;
+  grade: string | null;
+  scan_id: number | null;
+  environment_id: number | null;
+  environment_name: string | null;
+  open_findings: number;
+  modified_on: string | null;
+}
+
+export interface MySummary {
+  agents: number;
+  scored_agents: number;
+  avg_score: number | null;
+  worst_grade: string | null;
+  open_findings: number;
+  environments: number;
+  has_data: boolean;
+}
+
 export interface HistoryPoint {
   scan_id: number;
   score: number | null;
@@ -119,6 +145,7 @@ export interface AppConfig {
   aoai_model: string | null;
   has_aoai_key: boolean;
   report_access_group_id: string | null;
+  org_view_group_id: string | null;
   schedule_interval_hours: number;
   configured: boolean;
   judge_configured: boolean;
