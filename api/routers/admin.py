@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import CurrentUser, require_admin
+from api.oidc import reset_app_cache, reset_group_cache
 from api.schemas import (
     AppConfigIn,
     AppConfigOut,
@@ -95,6 +96,8 @@ async def put_config(
 
     await session.commit()
     await session.refresh(cfg)
+    reset_app_cache()
+    reset_group_cache()
     return _cfg_out(cfg)
 
 

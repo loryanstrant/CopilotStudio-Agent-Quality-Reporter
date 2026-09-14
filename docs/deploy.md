@@ -58,12 +58,16 @@ The service principal needs the Dynamics CRM `user_impersonation` application pe
 
 ## Entra single sign-on (optional)
 
-By default only the admin password protects the dashboard. To let licensed users view it with their Microsoft work account, enable **Entra SSO** at deploy time (it uses Azure Container Apps Easy Auth):
+By default only the admin password protects the dashboard. You can additionally let colleagues sign in with their Microsoft **work account** as read-only viewers; the **Admin** console stays password-protected.
 
-1. Register an app registration for sign-in (single-tenant is fine). Add a **Web** platform.
-2. In the deploy form's **Entra SSO** step, tick **Enable Entra ID single sign-on** and paste the app's **client ID** and a **client secret**.
-3. After deployment, copy the **`entraRedirectUriToRegister`** output (`https://<fqdn>/.auth/login/aad/callback`) and add it as a **Web redirect URI** on the app registration.
-4. Users now sign in with Entra ID to view the dashboard; the **Admin** console remains password-protected.
+Sign-in is performed by the app itself rather than by the hosting platform, so it behaves the same on Azure Container Apps, Docker on any host, or Kubernetes. There is nothing to configure at deploy time.
+
+1. No new app registration is needed — the service principal you already configured for scanning is reused.
+2. Sign in as the admin, open **Settings**, and copy the **redirect URI** shown under *Sign in with Microsoft (optional)*. It is `https://<fqdn>/auth/oidc/callback`.
+3. In the Entra portal, open that app registration → **Authentication → Add a platform → Web** and paste the redirect URI.
+4. Optionally set a **report access group ID** in **Settings** to admit only members of one Entra security group, and add a **groups** claim under **Token configuration** on the app registration. Without the claim the platform falls back to an app-only Graph `checkMemberGroups` call. Non-members are refused (fail-closed).
+
+Behind a reverse proxy the app derives its public address from `X-Forwarded-Proto` / `X-Forwarded-Host`. If your proxy does not send those, set `PUBLIC_BASE_URL` (for example `https://aqp.contoso.com`) so the redirect URI matches what you registered.
 
 ## Updating a deployment
 

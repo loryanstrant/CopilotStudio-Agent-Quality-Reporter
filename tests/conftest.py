@@ -33,6 +33,15 @@ async def _schema():
 
 
 @pytest_asyncio.fixture
+async def session():
+    """A database session, for tests that exercise logic below the API layer."""
+    from shared.db import SessionLocal
+
+    async with SessionLocal() as s:
+        yield s
+
+
+@pytest_asyncio.fixture
 async def client():
     from api.main import app
 
