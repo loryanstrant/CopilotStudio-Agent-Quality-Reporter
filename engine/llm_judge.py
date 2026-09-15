@@ -154,7 +154,7 @@ def judge_agent(
             ],
             response_format={"type": "json_object"},
             temperature=0.0,
-            max_tokens=1500,
+            max_completion_tokens=1500,
         )
         raw = response.choices[0].message.content or "{}"
         return json.loads(raw)
