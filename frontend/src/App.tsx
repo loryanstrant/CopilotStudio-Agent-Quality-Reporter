@@ -4,6 +4,7 @@ import { useSetupStatus } from "./hooks/useSetupStatus";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import OverviewPage from "./pages/OverviewPage";
+import BriefingPage from "./pages/BriefingPage";
 import PersonalPage from "./pages/PersonalPage";
 import AgentDetailPage from "./pages/AgentDetailPage";
 import HistoryPage from "./pages/HistoryPage";
@@ -66,6 +67,7 @@ export default function App() {
         />
         <Route path="/me" element={<PersonalPage />} />
         <Route path="/org" element={org(<OverviewPage />)} />
+        <Route path="/briefing" element={org(<BriefingPage />)} />
         <Route path="/agents/:botId" element={<AgentDetailPage />} />
         <Route path="/history" element={org(<HistoryPage />)} />
         <Route path="/help" element={<SetupGuidePage />} />

@@ -19,6 +19,8 @@ parameter.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -399,6 +401,210 @@ async def freshness(session: AsyncSession = Depends(get_session)) -> dict:
             else None
         ),
     }
+
+# --------------------------------------------------------------------------- #
+# Executive briefing
+#
+# Deliberately deterministic: pure SQL for this period against the one before
+# it, and prose assembled client-side from fixed thresholds. This app has Azure
+# OpenAI configured for the instruction judge and it is still not used here — a
+# briefing is the artefact most likely to be read aloud to a customer, and it
+# must never be able to invent a number.
+#
+# This is the first time-bucketed query in the app. Everything else produces a
+# trend by ordering rows; a briefing needs to compare two spans, so it groups.
+# Both spans are bounded by the most recent scan rather than by today, because
+# a report that says "down 40%" when the truth is "nobody has scanned for a
+# fortnight" is worse than no report.
+# --------------------------------------------------------------------------- #
+_GRADES = ("A", "B", "C", "D", "F")
+_SEVERITIES = ("blocker", "major", "minor", "info")
+
+
+async def _scan_ids_in(
+    session: AsyncSession, lo: datetime, hi: datetime
+) -> list[int]:
+    """The latest complete scan per environment within ``[lo, hi)``.
+
+    One scan per environment, not every scan in the window: counting all of
+    them would multiply each agent by however many times it happened to be
+    scanned, which differs per environment and per period.
+    """
+    rows = (
+        await session.execute(
+            select(Scan)
+            .where(
+                Scan.status == "complete",
+                Scan.environment_id.isnot(None),
+                Scan.started_at >= lo,
+                Scan.started_at < hi,
+            )
+            .order_by(Scan.started_at.desc())
+        )
+    ).scalars().all()
+    latest: dict[int | None, int] = {}
+    for s in rows:
+        if s.environment_id not in latest:
+            latest[s.environment_id] = s.id
+    return list(latest.values())
+
+
+async def _period_stats(session: AsyncSession, scan_ids: list[int]) -> dict:
+    """Agents, average score, grade mix and open findings for a set of scans."""
+    empty = {
+        "agents": 0,
+        "avg_score": None,
+        "environments": len(scan_ids),
+        "grades": {g: 0 for g in _GRADES},
+        "open_findings": 0,
+        "findings_by_severity": {s: 0 for s in _SEVERITIES},
+    }
+    if not scan_ids:
+        return empty
+
+    agents = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(AgentScore)
+            .where(AgentScore.scan_id.in_(scan_ids))
+        )
+        or 0
+    )
+    avg = await session.scalar(
+        select(func.avg(AgentScore.score)).where(
+            AgentScore.scan_id.in_(scan_ids), AgentScore.score.isnot(None)
+        )
+    )
+
+    grades = {g: 0 for g in _GRADES}
+    for grade, count in (
+        await session.execute(
+            select(AgentScore.grade, func.count())
+            .where(AgentScore.scan_id.in_(scan_ids), AgentScore.grade.isnot(None))
+            .group_by(AgentScore.grade)
+        )
+    ).all():
+        if grade in grades:
+            grades[grade] = int(count)
+
+    by_severity = {s: 0 for s in _SEVERITIES}
+    for severity, count in (
+        await session.execute(
+            select(Finding.severity, func.count())
+            .where(Finding.scan_id.in_(scan_ids), Finding.status == "fail")
+            .group_by(Finding.severity)
+        )
+    ).all():
+        if severity in by_severity:
+            by_severity[severity] = int(count)
+
+    return {
+        "agents": agents,
+        "avg_score": round(float(avg)) if avg is not None else None,
+        "environments": len(scan_ids),
+        "grades": grades,
+        "open_findings": sum(by_severity.values()),
+        "findings_by_severity": by_severity,
+    }
+
+
+@router.get("/briefing")
+async def briefing(
+    window_days: int = 30, session: AsyncSession = Depends(get_session)
+) -> dict:
+    """Executive snapshot: this period against the one before it.
+
+    Every number here comes from SQL. The page turns them into sentences using
+    fixed thresholds; nothing is generated.
+    """
+    period_end = await session.scalar(
+        select(func.max(Scan.started_at)).where(Scan.status == "complete")
+    )
+    if period_end is None:
+        return {
+            "window_days": window_days,
+            "period_end": None,
+            "has_data": False,
+            "current": await _period_stats(session, []),
+            "previous": await _period_stats(session, []),
+            "trend": [],
+            "worst_agents": [],
+            "top_rules": [],
+        }
+
+    window = timedelta(days=window_days)
+    cur_lo = period_end - window
+    # The end bound is exclusive, so nudge past the newest scan to include it.
+    cur_hi = period_end + timedelta(seconds=1)
+    cur_ids = await _scan_ids_in(session, cur_lo, cur_hi)
+    prev_ids = await _scan_ids_in(session, cur_lo - window, cur_lo)
+
+    # Average score per day across the whole history. func.date() is the one
+    # bucket expression Postgres and SQLite agree on.
+    day = func.date(AgentScore.captured_at)
+    trend = [
+        {"date": str(d), "avg_score": round(float(avg)) if avg is not None else None}
+        for d, avg in (
+            await session.execute(
+                select(day, func.avg(AgentScore.score))
+                .where(AgentScore.score.isnot(None))
+                .group_by(day)
+                .order_by(day)
+            )
+        ).all()
+    ]
+
+    # The agents worth naming: lowest scoring in the current period.
+    worst = [
+        {
+            "bot_id": r.bot_id,
+            "agent_name": r.agent_name,
+            "score": r.score,
+            "grade": r.grade,
+            "scan_id": r.scan_id,
+        }
+        for r in (
+            await session.execute(
+                select(AgentScore)
+                .where(AgentScore.scan_id.in_(cur_ids), AgentScore.score.isnot(None))
+                .order_by(AgentScore.score.asc())
+                .limit(5)
+            )
+        ).scalars().all()
+    ] if cur_ids else []
+
+    # The rules failing most often — what to fix once to fix it everywhere.
+    top_rules = [
+        {"rule_id": rule_id, "name": name, "severity": severity, "agents": int(count)}
+        for rule_id, name, severity, count in (
+            (
+                await session.execute(
+                    select(
+                        Finding.rule_id, Finding.name, Finding.severity, func.count()
+                    )
+                    .where(Finding.scan_id.in_(cur_ids), Finding.status == "fail")
+                    .group_by(Finding.rule_id, Finding.name, Finding.severity)
+                    .order_by(func.count().desc())
+                    .limit(5)
+                )
+            ).all()
+            if cur_ids
+            else []
+        )
+    ]
+
+    current = await _period_stats(session, cur_ids)
+    return {
+        "window_days": window_days,
+        "period_end": period_end.isoformat(),
+        "has_data": bool(cur_ids) and current["agents"] > 0,
+        "current": current,
+        "previous": await _period_stats(session, prev_ids),
+        "trend": trend,
+        "worst_agents": worst,
+        "top_rules": top_rules,
+    }
+
 
 # --------------------------------------------------------------------------- #
 # Personal view — "agents you created"

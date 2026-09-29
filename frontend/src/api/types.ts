@@ -177,6 +177,43 @@ export interface ScanProgress {
   started_at: string | null;
 }
 
+/** One period's worth of the executive briefing. Every figure is computed in
+ *  SQL; the page turns them into sentences but never invents one. */
+export interface BriefingPeriod {
+  agents: number;
+  avg_score: number | null;
+  environments: number;
+  grades: Record<string, number>;
+  open_findings: number;
+  findings_by_severity: Record<string, number>;
+}
+
+export interface BriefingRule {
+  rule_id: string;
+  name: string;
+  severity: string;
+  agents: number;
+}
+
+export interface BriefingAgent {
+  bot_id: string | null;
+  agent_name: string;
+  score: number | null;
+  grade: string | null;
+  scan_id: number;
+}
+
+export interface Briefing {
+  window_days: number;
+  period_end: string | null;
+  has_data: boolean;
+  current: BriefingPeriod;
+  previous: BriefingPeriod;
+  trend: { date: string; avg_score: number | null }[];
+  worst_agents: BriefingAgent[];
+  top_rules: BriefingRule[];
+}
+
 export function cleanPP(value: string | null | undefined): string {
   return (value || "").replace(/^\s*slide\s+\d+\s*[-–—:]\s*/i, "").trim();
 }

@@ -225,7 +225,12 @@ async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
                     environment_id=env.id,
                     solution_name="Demo solution",
                     source="demo",
-                    status="succeeded",
+                    # "complete" is the vocabulary the worker writes and every
+                    # reader filters on. This said "succeeded", which no query
+                    # in the app recognises — so demo data produced an empty
+                    # Overview and an empty History, and looked like a product
+                    # that does not work.
+                    status="complete",
                     started_at=started,
                     finished_at=started + timedelta(minutes=rng.randint(1, 6)),
                     agent_count=len(env_agents),
