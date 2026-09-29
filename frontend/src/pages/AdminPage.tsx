@@ -4,7 +4,7 @@ import { api } from "../api/client";
 import { AppConfig, Environment } from "../api/types";
 import SetupWizard from "../components/SetupWizard";
 import DemoDataCard from "../components/DemoDataCard";
-import { buildStamp } from "./AboutPage";
+import { buildStamp } from "../lib/buildStamp";
 
 function Field({
   label,

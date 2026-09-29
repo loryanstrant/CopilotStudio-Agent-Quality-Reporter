@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { api } from "../api/client";
 import CopilotStudioLogo from "../components/CopilotStudioLogo";
+import { buildStamp } from "../lib/buildStamp";
 
 export default function LoginPage() {
   const { login, ssoError } = useAuth();
@@ -10,12 +11,18 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [entraEnabled, setEntraEnabled] = useState(false);
+  const [build, setBuild] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
-        const cfg = await api.get<{ entra_enabled: boolean }>("/auth/config");
+        const cfg = await api.get<{
+          entra_enabled: boolean;
+          build_date: string | null;
+          build_time: string | null;
+        }>("/auth/config");
         setEntraEnabled(cfg.entra_enabled);
+        setBuild(buildStamp(cfg.build_date, cfg.build_time));
       } catch {
         /* ignore: the Microsoft button simply stays hidden */
       }
@@ -63,7 +70,7 @@ export default function LoginPage() {
           </p>
         </div>
         <div className="relative text-sm text-brand-100/80">
-          Community project · MIT-licensed
+          Community project · MIT-licensed{build ? ` · ${build}` : ""}
         </div>
       </div>
 
