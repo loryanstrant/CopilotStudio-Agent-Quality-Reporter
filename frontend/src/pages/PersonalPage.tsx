@@ -6,6 +6,11 @@ import { gradeColor, scoreColor } from "../components/chartTheme";
 import { useAuth } from "../auth/AuthContext";
 import KpiCard from "../components/KpiCard";
 
+/** "1 agent" / "3 agents" — a subtitle that says "1 agents" reads like a bug. */
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
 function GradeBadge({ grade }: { grade: string | null }) {
   if (!grade) return <span className="text-slate-500 dark:text-slate-400">–</span>;
   return (
@@ -131,17 +136,36 @@ export default function PersonalPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard label="Agents you created" value={summary.agents} />
+            {/* Every tile carries a subtitle that says something the label
+                does not. Two of these previously had none, which both left the
+                row looking ragged and wasted the line. */}
+            <KpiCard
+              label="Agents you created"
+              value={summary.agents}
+              hint={plural(summary.environments, "environment")}
+            />
             <KpiCard
               label="Average score"
               value={summary.avg_score ?? "–"}
-              hint={`${summary.scored_agents} scored`}
+              hint={`${summary.scored_agents} of ${summary.agents} scored`}
             />
-            <KpiCard label="Lowest grade" value={summary.worst_grade ?? "–"} />
+            <KpiCard
+              label="Lowest grade"
+              value={summary.worst_grade ?? "–"}
+              hint={
+                summary.worst_grade
+                  ? `${plural(summary.worst_grade_agents, "agent")} at this grade`
+                  : "Nothing scored yet"
+              }
+            />
             <KpiCard
               label="Open findings"
               value={summary.open_findings}
-              hint="Across your agents"
+              hint={
+                summary.open_findings > 0
+                  ? `On ${plural(summary.agents_with_findings, "agent")}`
+                  : "Nothing outstanding"
+              }
             />
           </div>
 

@@ -114,7 +114,9 @@ export interface MySummary {
   scored_agents: number;
   avg_score: number | null;
   worst_grade: string | null;
+  worst_grade_agents: number;
   open_findings: number;
+  agents_with_findings: number;
   environments: number;
   has_data: boolean;
 }

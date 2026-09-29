@@ -518,13 +518,21 @@ async def my_summary(
     cards = await _my_agent_cards(session, _me_upn(user))
     scored = [c["score"] for c in cards if c["score"] is not None]
     grades = [c["grade"] for c in cards if c["grade"]]
+    worst = max(grades) if grades else None
     return {
         "agents": len(cards),
         "scored_agents": len(scored),
         "avg_score": round(sum(scored) / len(scored)) if scored else None,
         # Worst grade is the useful one to surface: it is what needs attention.
-        "worst_grade": max(grades) if grades else None,
+        "worst_grade": worst,
+        # How many agents sit on that worst grade. One D is a bad afternoon;
+        # six is a pattern, and the tile should be able to say which.
+        "worst_grade_agents": sum(1 for g in grades if g == worst) if worst else 0,
         "open_findings": sum(c["open_findings"] for c in cards),
+        # How many agents carry at least one open finding. The total alone
+        # cannot distinguish one badly broken agent from twelve slightly
+        # untidy ones.
+        "agents_with_findings": sum(1 for c in cards if c["open_findings"] > 0),
         "environments": len({c["environment_id"] for c in cards}),
         "has_data": bool(cards),
     }

@@ -16,7 +16,7 @@ function navClass({ isActive }: { isActive: boolean }): string {
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+    <div className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
       {children}
     </div>
   );
@@ -51,7 +51,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <SvgDefs />
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-3 px-5 py-5">
-          <CopilotStudioLogo size={32} className="shrink-0" />
+          <CopilotStudioLogo className="h-9 w-9 shrink-0" />
           <div>
             <div className="text-sm font-semibold text-brand-600 dark:text-brand-500">
               Copilot Studio
@@ -62,7 +62,12 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="flex-1 space-y-1 px-3">
-          {/* Two sections: what is yours, and what belongs to the organisation.
+          {/* Four sections, the same four in all four solutions: what is
+              yours, what belongs to the organisation, what an administrator
+              configures, and where to get help. Every item sits under one of
+              them — Rules, Settings and About previously sat under no heading
+              at all, trailing off the end of the Organisation block.
+
               The organisation links stay visible but locked when the person is
               outside the approved group — hiding them looks like a bug, and
               says nothing about who to ask. */}
@@ -96,15 +101,23 @@ export default function Layout({ children }: { children: ReactNode }) {
           )}
 
           {isAdmin && (
-            <NavLink to="/rules" className={navClass}>
-              Rules
-            </NavLink>
+            <>
+              <SectionLabel>Administration</SectionLabel>
+              <NavLink to="/rules" className={navClass}>
+                Rules
+              </NavLink>
+              <NavLink to="/settings" className={navClass}>
+                Settings
+              </NavLink>
+            </>
           )}
-          {isAdmin && (
-            <NavLink to="/settings" className={navClass}>
-              Settings
-            </NavLink>
-          )}
+
+          {/* The setup guide was routed at /help and linked from nowhere, so a
+              working page nobody could reach. It belongs beside About. */}
+          <SectionLabel>Help</SectionLabel>
+          <NavLink to="/help" className={navClass}>
+            Setup guide
+          </NavLink>
           <NavLink to="/about" className={navClass}>
             About
           </NavLink>
