@@ -178,11 +178,3 @@ export interface ScanProgress {
 export function cleanPP(value: string | null | undefined): string {
   return (value || "").replace(/^\s*slide\s+\d+\s*[-–—:]\s*/i, "").trim();
 }
-
-export const GRADE_COLORS: Record<string, string> = {
-  A: "#2A9D8F",
-  B: "#52B788",
-  C: "#E9C46A",
-  D: "#F4A261",
-  F: "#E63946",
-};

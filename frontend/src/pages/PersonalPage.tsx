@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { GRADE_COLORS, MyAgentCard, MySummary } from "../api/types";
+import { MyAgentCard, MySummary } from "../api/types";
+import { gradeColor, scoreColor } from "../components/chartTheme";
 import { useAuth } from "../auth/AuthContext";
 import KpiCard from "../components/KpiCard";
 
@@ -10,7 +11,7 @@ function GradeBadge({ grade }: { grade: string | null }) {
   return (
     <span
       className="inline-grid h-7 w-7 place-items-center rounded-full text-sm font-bold text-white"
-      style={{ background: GRADE_COLORS[grade] || "#8D99AE" }}
+      style={{ background: gradeColor(grade) }}
     >
       {grade}
     </span>
@@ -19,7 +20,7 @@ function GradeBadge({ grade }: { grade: string | null }) {
 
 function ScoreBar({ score }: { score: number | null }) {
   const v = score ?? 0;
-  const color = v >= 75 ? "#2A9D8F" : v >= 60 ? "#E9C46A" : v >= 40 ? "#F4A261" : "#E63946";
+  const color = scoreColor(score);
   return (
     <div className="flex min-w-[120px] items-center gap-2">
       <div className="h-2 flex-1 rounded bg-slate-200 dark:bg-slate-700">

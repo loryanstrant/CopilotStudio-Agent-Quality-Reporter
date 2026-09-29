@@ -1,10 +1,4 @@
-const GRADE_COLORS: Record<string, string> = {
-  A: "#2A9D8F",
-  B: "#52B788",
-  C: "#E9C46A",
-  D: "#F4A261",
-  F: "#E63946",
-};
+import { gradeColor } from "./chartTheme";
 
 export default function ScoreGauge({
   score,
@@ -13,7 +7,7 @@ export default function ScoreGauge({
   score: number;
   grade: string;
 }) {
-  const color = GRADE_COLORS[grade] || "#8D99AE";
+  const color = gradeColor(grade);
   const r = 80;
   const cx = 100;
   const cy = 100;

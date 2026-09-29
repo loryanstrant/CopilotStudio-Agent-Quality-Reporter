@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { AgentDetail, HistoryPoint } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
+import { CHART_COLORS } from "../components/chartTheme";
 import ScoreGauge from "../components/ScoreGauge";
 import FindingsTable from "../components/FindingsTable";
 import JudgeCard from "../components/JudgeCard";
@@ -46,10 +47,10 @@ function HistoryChart({ data }: { data: HistoryPoint[] }) {
           strokeWidth="1"
         />
       ))}
-      <polyline points={pts} fill="none" stroke="#ff5800" strokeWidth="2.5" />
+      <polyline points={pts} fill="none" stroke={CHART_COLORS[0]} strokeWidth="2.5" />
       {data.map((d, i) => (
         <g key={i}>
-          <circle cx={xs(i)} cy={ys(d.score ?? 0)} r="3.5" fill="#ff5800" />
+          <circle cx={xs(i)} cy={ys(d.score ?? 0)} r="3.5" fill={CHART_COLORS[0]} />
           <title>
             {d.captured_at ? new Date(d.captured_at).toLocaleDateString() : ""}: {d.score}
           </title>

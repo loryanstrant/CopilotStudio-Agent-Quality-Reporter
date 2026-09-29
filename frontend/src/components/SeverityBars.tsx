@@ -1,9 +1,4 @@
-const SEV_COLORS: Record<string, string> = {
-  blocker: "#E63946",
-  major: "#F4A261",
-  minor: "#E9C46A",
-  info: "#8AB0AB",
-};
+import { sevColor } from "./chartTheme";
 
 export default function SeverityBars({
   data,
@@ -24,7 +19,7 @@ export default function SeverityBars({
           <div className="flex-1 h-4 bg-slate-200 dark:bg-slate-700 rounded">
             <div
               className="h-4 rounded"
-              style={{ width: `${(r.value / max) * 100}%`, background: SEV_COLORS[r.label] }}
+              style={{ width: `${(r.value / max) * 100}%`, background: sevColor(r.label) }}
             />
           </div>
           <span className="w-6 text-right font-semibold text-slate-900 dark:text-slate-100">{r.value}</span>

@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../theme/ThemeContext";
 import CopilotStudioLogo from "./CopilotStudioLogo";
+import SvgDefs from "./SvgDefs";
 
 function navClass({ isActive }: { isActive: boolean }): string {
   return [
@@ -45,6 +46,9 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-full">
+      {/* One hidden <defs> for every chart gradient, rendered once. SVG paint
+          references resolve document-wide, so no chart needs its own. */}
+      <SvgDefs />
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-3 px-5 py-5">
           <CopilotStudioLogo size={32} className="shrink-0" />
