@@ -368,8 +368,8 @@ export default function AdminPage() {
           Lets colleagues sign in with their work account as read-only viewers. It reuses the
           service principal above, so there is nothing extra to create — you only need to register
           the redirect URI below on the app registration, under{" "}
-          <span className="font-medium">Authentication → Web</span>. Administration stays behind the
-          admin password.
+          <span className="font-medium">Authentication → Web</span>. Everyone who signs in this
+          way is a viewer unless they are in the admin group above.
         </p>
         <Field
           label="Redirect URI"

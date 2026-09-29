@@ -13,21 +13,28 @@ from sqlalchemy import select
 
 from scripts.seed_demo import _DEMO_ADMIN_MAKER, clear, seed
 from shared.db import SessionLocal
-from shared.models import Agent, AppUser, JudgeResult, TelemetrySnapshot
+from shared.models import (
+    Agent,
+    AppConfig,
+    AppUser,
+    Environment,
+    JudgeResult,
+    TelemetrySnapshot,
+)
 from shared.security import hash_password
+from worker.scan import run_scan
 
 
-async def _add_admin(upn: str | None = None) -> None:
+async def _add_admin() -> None:
     async with SessionLocal() as s:
-        s.add(
-            AppUser(
-                username="admin",
-                password_hash=hash_password("pw"),
-                role="admin",
-                upn=upn,
-            )
-        )
+        s.add(AppUser(username="admin", password_hash=hash_password("pw"), role="admin"))
         await s.commit()
+
+
+async def _persona() -> str | None:
+    async with SessionLocal() as s:
+        cfg = await s.get(AppConfig, 1)
+        return cfg.demo_persona_upn if cfg else None
 
 
 @pytest.mark.asyncio
@@ -65,18 +72,16 @@ async def test_telemetry_is_seeded_so_the_app_insights_panel_is_not_empty():
 
 
 @pytest.mark.asyncio
-async def test_seeding_binds_the_local_admin_to_a_maker():
+async def test_seeding_sets_the_demo_persona():
     """Otherwise the personal pages the README advertises cannot be reached at
     all without an Entra tenant."""
     await _add_admin()
     await seed(agents=6, reset=True)
-    async with SessionLocal() as s:
-        admin = await s.scalar(select(AppUser).where(AppUser.username == "admin"))
-    assert admin.upn == _DEMO_ADMIN_MAKER[1]
+    assert await _persona() == _DEMO_ADMIN_MAKER[1]
 
 
 @pytest.mark.asyncio
-async def test_the_bound_admin_actually_owns_agents():
+async def test_the_persona_actually_owns_agents():
     """A binding to a maker with no agents would be worse than none: the page
     would load and be empty, which reads as a broken feature."""
     await _add_admin()
@@ -91,30 +96,89 @@ async def test_the_bound_admin_actually_owns_agents():
 
 
 @pytest.mark.asyncio
-async def test_a_real_binding_is_never_reassigned():
-    """Seeding demo data must not quietly repoint somebody's break-glass
-    account at a fictional person."""
-    await _add_admin(upn="real.person@contoso.com")
+async def test_an_sso_user_never_inherits_the_persona():
+    """The persona exists so whoever loaded the demo data can see the pages it
+    unlocks. A real signed-in person keeps their own identity."""
+    from api.auth import CurrentUser, personal_view_upn
+
+    await _add_admin()
     await seed(agents=6, reset=True)
     async with SessionLocal() as s:
-        admin = await s.scalar(select(AppUser).where(AppUser.username == "admin"))
-    assert admin.upn == "real.person@contoso.com"
+        real = CurrentUser(
+            username="ada@contoso.com", role="viewer", oid="oid-1", upn="ada@contoso.com"
+        )
+        assert await personal_view_upn(real, s) == "ada@contoso.com"
 
 
 @pytest.mark.asyncio
-async def test_clearing_demo_data_unbinds_the_admin():
+async def test_a_local_viewer_does_not_get_the_persona():
+    """Only the account that could have loaded the demo data stands in for it."""
+    from api.auth import CurrentUser, personal_view_upn
+
+    await _add_admin()
+    await seed(agents=6, reset=True)
+    async with SessionLocal() as s:
+        viewer = CurrentUser(username="reader", role="viewer")
+        assert await personal_view_upn(viewer, s) is None
+
+
+@pytest.mark.asyncio
+async def test_clearing_demo_data_clears_the_persona():
     """An admin still bound after the data is gone gets an empty personal view
     rather than no personal view, which looks like a bug."""
     await _add_admin()
     await seed(agents=6, reset=True)
     await clear()
-    async with SessionLocal() as s:
-        admin = await s.scalar(select(AppUser).where(AppUser.username == "admin"))
-    assert admin.upn is None
+    assert await _persona() is None
 
 
 @pytest.mark.asyncio
-async def test_a_bound_admin_reaches_the_personal_view(client):
+async def test_a_real_scan_retires_the_persona(monkeypatch):
+    """Once there is real data the persona points at a maker with no agents —
+    a personal view that loads and is empty, which reads as broken.
+
+    Only the Dataverse fetch is stubbed. The scan itself runs for real, so this
+    exercises the retirement where it actually lives rather than asserting that
+    a helper was called.
+    """
+    import worker.scan as scan_mod
+    from shared.db import SessionLocal as SL
+
+    await _add_admin()
+    await seed(agents=6, reset=True)
+    assert await _persona() is not None
+
+    async with SessionLocal() as s:
+        env = (await s.execute(select(Environment))).scalars().first()
+        env_id = env.id
+
+    async def _fake_gather(session, *, source, environment_id):
+        return [{"display_name": "Real Agent", "instructions": "x" * 250}], env
+
+    monkeypatch.setattr(scan_mod, "_gather_agents", _fake_gather)
+    await run_scan(SL, source="dataverse", environment_id=env_id)
+    assert await _persona() is None
+
+
+@pytest.mark.asyncio
+async def test_a_demo_scan_does_not_retire_the_persona(monkeypatch):
+    """Re-running the demo must not switch the personal pages back off."""
+    import worker.scan as scan_mod
+    from shared.db import SessionLocal as SL
+
+    await _add_admin()
+    await seed(agents=6, reset=True)
+
+    async def _fake_gather(session, *, source, environment_id):
+        return [{"display_name": "Demo Agent", "instructions": "x" * 250}], None
+
+    monkeypatch.setattr(scan_mod, "_gather_agents", _fake_gather)
+    await run_scan(SL, source="demo")
+    assert await _persona() == _DEMO_ADMIN_MAKER[1]
+
+
+@pytest.mark.asyncio
+async def test_the_persona_makes_the_personal_view_reachable(client):
     """The whole point: password sign-in, no Entra, personal pages reachable."""
     await _add_admin()
     await seed(agents=6, reset=True)
@@ -131,7 +195,7 @@ async def test_a_bound_admin_reaches_the_personal_view(client):
 
 
 @pytest.mark.asyncio
-async def test_an_unbound_local_admin_still_has_no_personal_view(client):
+async def test_a_local_admin_without_a_persona_has_no_personal_view(client):
     """The default is unchanged: no directory identity, no "me" to filter to."""
     await _add_admin()
     r = await client.post("/auth/login", json={"username": "admin", "password": "pw"})

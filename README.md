@@ -161,8 +161,9 @@ progress. You can **Edit** an environment later to rename it or add Application 
 ### Enabling Entra ID single sign-on (optional)
 
 By default the dashboard is protected by the single admin password. You can additionally let
-colleagues sign in with their **work account** (read-only viewer) — administration stays behind
-the password.
+colleagues sign in with their **work account**. They are viewers unless they are in the
+**Admin group** configured in Settings, whose members administer the app on sign-in — see
+[Authentication](#authentication).
 
 Sign-in is performed by the app itself, so it works the same wherever you run it: Azure, Docker
 on a NAS, Kubernetes, anywhere. There is nothing to configure on the hosting platform.

@@ -87,12 +87,23 @@ export default function AgentCreatorsPage() {
     {
       key: "name",
       header: "Creator",
-      accessor: (r) => r.display_name || r.upn,
+      // Name over sign-in name in one column, the way the sidebar shows a
+      // person. Two columns needed 1010px of table in a 974px space at a
+      // 1280px window, which put Environments behind a horizontal scrollbar on
+      // a very ordinary laptop. The filter still matches either, because the
+      // accessor carries both.
+      accessor: (r) => `${r.display_name ?? ""} ${r.upn}`.trim(),
       render: (r) => (
-        <span title={r.upn}>{r.display_name || r.upn}</span>
+        <div className="min-w-0">
+          <div className="truncate">{r.display_name || r.upn}</div>
+          {r.display_name && (
+            <div className="truncate text-xs font-normal text-slate-400 dark:text-slate-500">
+              {r.upn}
+            </div>
+          )}
+        </div>
       ),
     },
-    { key: "upn", header: "Sign-in name", accessor: (r) => r.upn },
     { key: "agents", header: "Agents", type: "number", align: "right", accessor: (r) => r.agents },
     {
       key: "avg",

@@ -58,7 +58,7 @@ The service principal needs the Dynamics CRM `user_impersonation` application pe
 
 ## Entra single sign-on (optional)
 
-By default only the admin password protects the dashboard. You can additionally let colleagues sign in with their Microsoft **work account** as read-only viewers; the **Admin** console stays password-protected.
+By default only the admin password protects the dashboard. You can additionally let colleagues sign in with their Microsoft **work account**. They are read-only viewers unless they belong to the **Admin group** set in Settings — its members administer the app on sign-in, so administration does not have to be one shared password. Leave that field blank and nobody gets admin by single sign-on; the password account is unaffected either way.
 
 Sign-in is performed by the app itself rather than by the hosting platform, so it behaves the same on Azure Container Apps, Docker on any host, or Kubernetes. There is nothing to configure at deploy time.
 

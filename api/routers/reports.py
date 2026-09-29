@@ -25,7 +25,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.auth import CurrentUser, get_current_user, require_org_view
+from api.auth import (
+    CurrentUser,
+    get_current_user,
+    personal_view_upn,
+    require_org_view,
+)
 from shared.db import get_session
 from shared.models import (
     Agent,
@@ -760,9 +765,16 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
 # "which user?" parameter: if a caller could name the user, any viewer could
 # read someone else's agents by editing a URL.
 # --------------------------------------------------------------------------- #
-def _me_upn(user: CurrentUser) -> str:
-    """The signed-in person's UPN, or 404."""
-    if not user.upn:
+async def _me_upn(user: CurrentUser, session: AsyncSession) -> str:
+    """The signed-in person's UPN, or 404.
+
+    Goes through :func:`personal_view_upn` rather than reading the claim
+    directly, so the local admin standing in for a demo persona reaches these
+    routes too — otherwise the pages would render and every call behind them
+    would 404.
+    """
+    upn = await personal_view_upn(user, session)
+    if not upn:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
@@ -770,7 +782,7 @@ def _me_upn(user: CurrentUser) -> str:
                 "work account to see the agents you created."
             ),
         )
-    return user.upn
+    return upn
 
 
 async def _my_agent_rows(session: AsyncSession, upn: str) -> list[Agent]:
@@ -862,7 +874,7 @@ async def my_summary(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Rollup over the agents this person created."""
-    cards = await _my_agent_cards(session, _me_upn(user))
+    cards = await _my_agent_cards(session, await _me_upn(user, session))
     scored = [c["score"] for c in cards if c["score"] is not None]
     grades = [c["grade"] for c in cards if c["grade"]]
     worst = max(grades) if grades else None
@@ -891,7 +903,7 @@ async def my_agents(
     session: AsyncSession = Depends(get_session),
 ) -> list[dict]:
     """Every agent this person created, with its latest score and open findings."""
-    return await _my_agent_cards(session, _me_upn(user))
+    return await _my_agent_cards(session, await _me_upn(user, session))
 
 
 @me_router.get("/agents/{bot_id}")
@@ -908,7 +920,7 @@ async def my_agent_detail(
     guessing ids would read other people's scorecards. A non-owner gets 404
     rather than 403 so the endpoint does not confirm that the id exists.
     """
-    upn = _me_upn(user)
+    upn = await _me_upn(user, session)
     agent = await session.scalar(
         select(Agent).where(
             Agent.bot_id == bot_id,
@@ -933,7 +945,7 @@ async def my_agent_history(
     session: AsyncSession = Depends(get_session),
 ) -> list[dict]:
     """Score history for one of this person's own agents."""
-    upn = _me_upn(user)
+    upn = await _me_upn(user, session)
     owned = await session.scalar(
         select(Agent.id).where(
             Agent.bot_id == bot_id,

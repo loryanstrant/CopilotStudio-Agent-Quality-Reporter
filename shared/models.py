@@ -65,6 +65,13 @@ class AppConfig(Base):
     # grants admin to nobody: unlike the org view, administration fails closed.
     admin_group_id: Mapped[str | None] = mapped_column(Text)
 
+    # The seeded agent creator the local admin stands in for while demo data is
+    # loaded. Agents are attributed by their creator's UPN and a password
+    # account has none, so without this the personal pages cannot be reached at
+    # all without Entra. Written only by an explicit demo seed, cleared with the
+    # demo data, and retired after the first successful real scan.
+    demo_persona_upn: Mapped[str | None] = mapped_column(Text)
+
     # Scan cadence: run every N hours (1..24; 24 = daily).
     schedule_interval_hours: Mapped[int] = mapped_column(Integer, default=24)
 
@@ -298,12 +305,6 @@ class AppUser(Base):
     username: Mapped[str] = mapped_column(Text, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(Text)
     role: Mapped[str] = mapped_column(Text, default="viewer")  # admin | viewer
-    # Optional directory identity for a local account. Agents are attributed by
-    # their creator's UPN, so without one a password sign-in has no "me" to
-    # filter down to and the personal view is unreachable. Loading demo data
-    # sets this, which is the only way to evaluate the personal pages without
-    # wiring up Entra.
-    upn: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

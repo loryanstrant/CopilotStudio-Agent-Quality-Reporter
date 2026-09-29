@@ -10,10 +10,10 @@ Run inside the container / venv::
     python -m scripts.seed_demo --agents 40 --reset
     python -m scripts.seed_demo --clear
 
-``--reset`` clears the scan/agent tables first. This never touches credentials
-(``app_config``). It makes exactly one change to ``app_users``: it points the
-local admin account at one of the seeded agent creators, so the personal pages
-can be reached without an Entra tenant (see :func:`_bind_local_admin`).
+``--reset`` clears the scan/agent tables first. It never touches credentials or
+user accounts. It sets exactly one field on ``app_config`` —
+``demo_persona_upn`` — so the local admin can reach the personal pages without
+an Entra tenant (see :func:`_bind_persona`).
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from shared.db import SessionLocal
 from shared.models import (
     Agent,
     AgentScore,
-    AppUser,
+    AppConfig,
     Environment,
     Finding,
     JudgeResult,
@@ -71,10 +71,6 @@ _MAKERS = [
 # The maker the local admin account is bound to when demo data is loaded, so
 # whoever is evaluating the product lands on a personal view with agents in it.
 _DEMO_ADMIN_MAKER = _MAKERS[0]
-
-# Any UPN in this domain is demo data, which is how _bind_local_admin can tell
-# a binding it created from one a real deployment set deliberately.
-_DEMO_DOMAIN = "@contoso.local"
 
 # Judge prose, one entry per agent slot. Real judge output is a list of short
 # points, and these columns are JSON list columns — writing a single string
@@ -119,28 +115,25 @@ def _grade(score: int) -> str:
     return "F"
 
 
-async def _bind_local_admin(session, upn: str | None) -> None:
-    """Point the local admin account at a demo maker (or unbind it).
+async def _bind_persona(session, upn: str | None) -> None:
+    """Point the demo persona at a seeded maker, or clear it.
 
     Agents are attributed by their creator's UPN, so a password account has no
     "me" to filter a personal view down to and the personal pages are
     unreachable — which meant nobody evaluating this product with demo data
     could see pages the README advertises.
 
-    Only a NULL binding or a previous demo binding is touched. A deployment
-    that has deliberately pointed its break-glass account at a real directory
-    UPN keeps it, because seeding demo data must never quietly reassign
-    somebody's identity.
+    The binding lives on ``app_config`` beside the rest of the configuration,
+    not on the account: it is a property of "this deployment is currently
+    showing demo data", not of the person signing in. It is read per request
+    (see :func:`api.auth.personal_view_upn`), so clearing the data takes effect
+    immediately rather than at the admin's next sign-in.
     """
-    admins = (
-        (await session.execute(select(AppUser).where(AppUser.role == "admin")))
-        .scalars()
-        .all()
-    )
-    for admin in admins:
-        if admin.upn and not admin.upn.endswith(_DEMO_DOMAIN):
-            continue
-        admin.upn = upn
+    cfg = await session.get(AppConfig, 1)
+    if cfg is None:
+        cfg = AppConfig(id=1)
+        session.add(cfg)
+    cfg.demo_persona_upn = upn
 
 
 async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
@@ -154,8 +147,8 @@ async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
 
     async with SessionLocal() as session:
         if reset:
-            # Fact tables only — app_config is untouched, and app_users only
-            # gains the admin binding set at the end of this function.
+            # Fact tables only. Credentials and accounts are untouched; the
+            # only app_config field written is the demo persona, at the end.
             await session.execute(delete(TelemetrySnapshot))
             await session.execute(delete(JudgeResult))
             await session.execute(delete(Finding))
@@ -355,7 +348,7 @@ async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
                 scan.score = avg
                 scan.grade = _grade(avg)
 
-        await _bind_local_admin(session, _DEMO_ADMIN_MAKER[1])
+        await _bind_persona(session, _DEMO_ADMIN_MAKER[1])
         await session.commit()
 
     return {
@@ -376,10 +369,10 @@ async def clear() -> dict[str, int]:
         await session.execute(delete(Scan))
         await session.execute(delete(Agent))
         await session.execute(delete(Environment))
-        # Unbind too: an admin still pointed at a demo maker after the data is
-        # gone gets an empty personal view rather than no personal view, which
-        # looks like the feature is broken.
-        await _bind_local_admin(session, None)
+        # Clear the persona too: an admin still pointed at a demo maker after
+        # the data is gone gets an empty personal view rather than no personal
+        # view, which looks like the feature is broken.
+        await _bind_persona(session, None)
         await session.commit()
     return {"cleared": 1}
 

@@ -46,7 +46,13 @@ class CurrentUser(BaseModel):
     display_name: str | None = None
 
     @property
-    def has_personal_view(self) -> bool:
+    def has_token_identity(self) -> bool:
+        """Whether the token itself names a person.
+
+        Not the same question as "does this account have a personal view" —
+        while demo data is loaded the local admin has one without any claim.
+        Use :func:`personal_view_upn` for that; this is only the fast path.
+        """
         # Agents are attributed by UPN here, so a UPN alone is enough.
         return bool(self.upn or self.oid)
 
@@ -144,6 +150,35 @@ async def is_admin(user: CurrentUser, session: AsyncSession) -> bool:
     return await is_group_member(principal, group_id, session)
 
 
+async def personal_view_upn(user: CurrentUser, session: AsyncSession) -> str | None:
+    """The person whose agents this account may see as "mine", if any.
+
+    Normally that is the signed-in person themselves, taken from the UPN in the
+    token — this app has no user dimension, so the only trace of a person is the
+    UPN Copilot Studio stamps on an agent they created.
+
+    The exception is the local password account while demo data is loaded. It
+    has no directory identity of its own, so it stands in for the seeded demo
+    persona. Without that, the personal pages cannot be opened at all without
+    Entra, and anyone evaluating the product never sees them.
+
+    The binding is only ever written by an explicit demo seed, is cleared with
+    the demo data, and is retired after the first successful real scan — so a
+    real deployment that has never seeded returns None here and behaves exactly
+    as it did before.
+    """
+    if user.upn:
+        return user.upn
+    # Only the local administrator stands in for the persona. Any other local
+    # account is left as it was: the binding exists so whoever loaded the demo
+    # data can see the pages it unlocks, not so that every password account in
+    # the deployment inherits a fictional person.
+    if user.role != "admin":
+        return None
+    cfg = await session.get(AppConfig, 1)
+    return (cfg.demo_persona_upn if cfg else None) or None
+
+
 async def effective_role(user: CurrentUser, session: AsyncSession) -> str:
     """The role the UI should act on, after the admin group is considered.
 
@@ -224,6 +259,7 @@ __all__ = [
     "get_current_user",
     "get_session",
     "is_admin",
+    "personal_view_upn",
     "require_admin",
     "require_org_view",
 ]
