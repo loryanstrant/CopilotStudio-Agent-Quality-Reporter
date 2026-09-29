@@ -22,7 +22,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import CurrentUser, get_current_user, require_org_view
@@ -628,6 +628,11 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
     Scores come from each agent's most recent scored appearance, so a creator's
     average reflects the current state of their agents rather than whichever
     scan happened to run last in their environment.
+
+    Deliberately four queries regardless of how many agents there are. The
+    personal view can afford a per-agent lookup because it only ever walks one
+    person's agents; this page walks every agent in the tenant, so the same
+    pattern would have been two queries per agent across potentially hundreds.
     """
     env_names = {
         e.id: e.display_name
@@ -639,6 +644,45 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
             select(Agent).where(Agent.created_by_upn.isnot(None))
         )
     ).scalars().all()
+
+    # Latest scored appearance per agent, in one query: group to find each
+    # bot's newest capture, then join back for the whole row.
+    newest = (
+        select(
+            AgentScore.bot_id.label("bot_id"),
+            func.max(AgentScore.captured_at).label("ts"),
+        )
+        .where(AgentScore.bot_id.isnot(None))
+        .group_by(AgentScore.bot_id)
+        .subquery()
+    )
+    latest_by_bot: dict[str, AgentScore] = {}
+    for row in (
+        await session.execute(
+            select(AgentScore).join(
+                newest,
+                and_(
+                    AgentScore.bot_id == newest.c.bot_id,
+                    AgentScore.captured_at == newest.c.ts,
+                ),
+            )
+        )
+    ).scalars().all():
+        # Two scans can share a timestamp; first one wins, as the ordered
+        # per-agent query it replaces also did.
+        latest_by_bot.setdefault(row.bot_id, row)
+
+    # Open findings for every (scan, agent) pair, also in one query.
+    open_by_key: dict[tuple[int, str], int] = {
+        (scan_id, agent_name): int(count)
+        for scan_id, agent_name, count in (
+            await session.execute(
+                select(Finding.scan_id, Finding.agent_name, func.count())
+                .where(Finding.status == "fail", Finding.agent_name.isnot(None))
+                .group_by(Finding.scan_id, Finding.agent_name)
+            )
+        ).all()
+    }
 
     # Group case-insensitively: Dataverse and Entra disagree about casing, and
     # one person must not appear as two rows because of it.
@@ -663,9 +707,7 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
         row["display_name"] = row["display_name"] or agent.created_by_name
         row["agents"] += 1
 
-        score_row = (
-            await _latest_score(session, agent.bot_id) if agent.bot_id else None
-        )
+        score_row = latest_by_bot.get(agent.bot_id) if agent.bot_id else None
         env_id = (
             score_row.environment_id if score_row is not None else agent.environment_id
         )
@@ -676,8 +718,8 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
                 row["scores"].append(score_row.score)
             if score_row.grade in row["grades"]:
                 row["grades"][score_row.grade] += 1
-            row["open_findings"] += await _open_findings(
-                session, score_row.scan_id, score_row.agent_name
+            row["open_findings"] += open_by_key.get(
+                (score_row.scan_id, score_row.agent_name), 0
             )
 
     out = []
