@@ -58,7 +58,11 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
-    token = create_access_token(user.username, user.role)
+    # A local account usually has no UPN, and then this behaves exactly as it
+    # always did: no upn claim, so no personal view. When one is set — which is
+    # what loading demo data does — the personal pages become reachable without
+    # an Entra tenant.
+    token = create_access_token(user.username, user.role, upn=user.upn)
     return TokenOut(access_token=token, username=user.username, role=user.role)
 
 
@@ -165,6 +169,7 @@ async def me(
         username=user.username,
         role=await effective_role(user, session),
         display_name=user.display_name,
+        upn=user.upn,
         can_view_org=await can_view_org(user, session),
         has_personal_view=user.has_personal_view,
     )

@@ -43,6 +43,8 @@ export default function Layout({ children }: { children: ReactNode }) {
   const isAdmin = user?.role === "admin";
   const personal = Boolean(user?.has_personal_view);
   const canViewOrg = Boolean(user?.can_view_org);
+  const identityName = user?.display_name || user?.upn || user?.username;
+  const identifier = user?.upn || user?.username;
 
   return (
     <div className="flex h-full">
@@ -130,19 +132,23 @@ export default function Layout({ children }: { children: ReactNode }) {
             <span>{theme === "dark" ? "Dark" : "Light"} mode</span>
             <span aria-hidden>{theme === "dark" ? "🌙" : "☀️"}</span>
           </button>
+          {/* Name, then identifier, then role. The identifier is the UPN when
+              there is one, because that is what this app keys a person's
+              agents on — the local account name says nothing about who is on
+              screen. It is hidden when it would only repeat the line above. */}
           <div>
             <div
               className="truncate font-medium text-slate-800 dark:text-slate-100"
-              title={user?.display_name ?? user?.username}
+              title={identityName}
             >
-              {user?.display_name ?? user?.username}
+              {identityName}
             </div>
-            {user?.display_name && (
+            {identifier && identifier !== identityName && (
               <div
                 className="truncate text-xs text-slate-400 dark:text-slate-500"
-                title={user.username}
+                title={identifier}
               >
-                {user.username}
+                {identifier}
               </div>
             )}
             <div className="mb-3 mt-1 text-xs uppercase tracking-wide text-slate-400">

@@ -116,7 +116,7 @@ export default function PersonalPage() {
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             {/* The display name when Entra sent one, otherwise the UPN: a
                 sentence about a person reads better with their name in it. */}
-            Agents created by {user.display_name ?? user.username}, with their latest quality
+            Agents created by {user.display_name || user.upn || user.username}, with their latest quality
             score and anything still open.
           </p>
         </div>
