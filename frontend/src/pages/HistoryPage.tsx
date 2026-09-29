@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-import { ScanRow, GRADE_COLORS } from "../api/types";
+import { ScanRow } from "../api/types";
+import { gradeColor } from "../components/chartTheme";
 
 type SortKey = "started_at" | "environment" | "source" | "trigger" | "agent_count" | "avg_score" | "grade";
 
@@ -84,7 +85,7 @@ export default function HistoryPage() {
               <td className="py-2 pr-3 font-semibold text-slate-900 dark:text-slate-100">{s.avg_score ?? "–"}</td>
               <td className="py-2 pr-3">
                 {s.grade && (
-                  <span className="pill text-white" style={{ background: GRADE_COLORS[s.grade] || "#8D99AE" }}>
+                  <span className="pill text-white" style={{ background: gradeColor(s.grade) }}>
                     {s.grade}
                   </span>
                 )}

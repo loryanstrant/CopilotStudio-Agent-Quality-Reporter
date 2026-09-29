@@ -179,6 +179,20 @@ async def run_scan(
             scan.grade = grade_for_score(rollup) if rollup is not None else None
             scan.status = "complete"
             scan.finished_at = datetime.now(timezone.utc)
+
+            # A real scan means this deployment has real data, so the demo
+            # persona has done its job and is retired. Left in place it would
+            # keep pointing the local admin at a fictional maker who no longer
+            # has any agents — a personal view that loads and is empty, which
+            # reads as a broken feature rather than a finished demo.
+            if source != "demo":
+                cfg = await session.get(AppConfig, 1)
+                if cfg is not None and cfg.demo_persona_upn:
+                    logger.info(
+                        "Retiring demo persona %s after a real scan", cfg.demo_persona_upn
+                    )
+                    cfg.demo_persona_upn = None
+
             await session.commit()
         except Exception as exc:  # noqa: BLE001
             scan.status = "failed"

@@ -19,11 +19,18 @@ parameter.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.auth import CurrentUser, get_current_user, require_org_view
+from api.auth import (
+    CurrentUser,
+    get_current_user,
+    personal_view_upn,
+    require_org_view,
+)
 from shared.db import get_session
 from shared.models import (
     Agent,
@@ -401,6 +408,351 @@ async def freshness(session: AsyncSession = Depends(get_session)) -> dict:
     }
 
 # --------------------------------------------------------------------------- #
+# Executive briefing
+#
+# Deliberately deterministic: pure SQL for this period against the one before
+# it, and prose assembled client-side from fixed thresholds. This app has Azure
+# OpenAI configured for the instruction judge and it is still not used here — a
+# briefing is the artefact most likely to be read aloud to a customer, and it
+# must never be able to invent a number.
+#
+# This is the first time-bucketed query in the app. Everything else produces a
+# trend by ordering rows; a briefing needs to compare two spans, so it groups.
+# Both spans are bounded by the most recent scan rather than by today, because
+# a report that says "down 40%" when the truth is "nobody has scanned for a
+# fortnight" is worse than no report.
+# --------------------------------------------------------------------------- #
+_GRADES = ("A", "B", "C", "D", "F")
+_SEVERITIES = ("blocker", "major", "minor", "info")
+
+
+async def _scan_ids_in(
+    session: AsyncSession, lo: datetime, hi: datetime
+) -> list[int]:
+    """The latest complete scan per environment within ``[lo, hi)``.
+
+    One scan per environment, not every scan in the window: counting all of
+    them would multiply each agent by however many times it happened to be
+    scanned, which differs per environment and per period.
+    """
+    rows = (
+        await session.execute(
+            select(Scan)
+            .where(
+                Scan.status == "complete",
+                Scan.environment_id.isnot(None),
+                Scan.started_at >= lo,
+                Scan.started_at < hi,
+            )
+            .order_by(Scan.started_at.desc())
+        )
+    ).scalars().all()
+    latest: dict[int | None, int] = {}
+    for s in rows:
+        if s.environment_id not in latest:
+            latest[s.environment_id] = s.id
+    return list(latest.values())
+
+
+async def _period_stats(session: AsyncSession, scan_ids: list[int]) -> dict:
+    """Agents, average score, grade mix and open findings for a set of scans."""
+    empty = {
+        "agents": 0,
+        "avg_score": None,
+        "environments": len(scan_ids),
+        "grades": {g: 0 for g in _GRADES},
+        "open_findings": 0,
+        "findings_by_severity": {s: 0 for s in _SEVERITIES},
+    }
+    if not scan_ids:
+        return empty
+
+    agents = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(AgentScore)
+            .where(AgentScore.scan_id.in_(scan_ids))
+        )
+        or 0
+    )
+    avg = await session.scalar(
+        select(func.avg(AgentScore.score)).where(
+            AgentScore.scan_id.in_(scan_ids), AgentScore.score.isnot(None)
+        )
+    )
+
+    grades = {g: 0 for g in _GRADES}
+    for grade, count in (
+        await session.execute(
+            select(AgentScore.grade, func.count())
+            .where(AgentScore.scan_id.in_(scan_ids), AgentScore.grade.isnot(None))
+            .group_by(AgentScore.grade)
+        )
+    ).all():
+        if grade in grades:
+            grades[grade] = int(count)
+
+    by_severity = {s: 0 for s in _SEVERITIES}
+    for severity, count in (
+        await session.execute(
+            select(Finding.severity, func.count())
+            .where(Finding.scan_id.in_(scan_ids), Finding.status == "fail")
+            .group_by(Finding.severity)
+        )
+    ).all():
+        if severity in by_severity:
+            by_severity[severity] = int(count)
+
+    return {
+        "agents": agents,
+        "avg_score": round(float(avg)) if avg is not None else None,
+        "environments": len(scan_ids),
+        "grades": grades,
+        "open_findings": sum(by_severity.values()),
+        "findings_by_severity": by_severity,
+    }
+
+
+@router.get("/briefing")
+async def briefing(
+    window_days: int = 30, session: AsyncSession = Depends(get_session)
+) -> dict:
+    """Executive snapshot: this period against the one before it.
+
+    Every number here comes from SQL. The page turns them into sentences using
+    fixed thresholds; nothing is generated.
+    """
+    period_end = await session.scalar(
+        select(func.max(Scan.started_at)).where(Scan.status == "complete")
+    )
+    if period_end is None:
+        return {
+            "window_days": window_days,
+            "period_end": None,
+            "has_data": False,
+            "current": await _period_stats(session, []),
+            "previous": await _period_stats(session, []),
+            "trend": [],
+            "worst_agents": [],
+            "top_rules": [],
+        }
+
+    window = timedelta(days=window_days)
+    cur_lo = period_end - window
+    # The end bound is exclusive, so nudge past the newest scan to include it.
+    cur_hi = period_end + timedelta(seconds=1)
+    cur_ids = await _scan_ids_in(session, cur_lo, cur_hi)
+    prev_ids = await _scan_ids_in(session, cur_lo - window, cur_lo)
+
+    # Average score per day across the whole history. func.date() is the one
+    # bucket expression Postgres and SQLite agree on.
+    day = func.date(AgentScore.captured_at)
+    trend = [
+        {"date": str(d), "avg_score": round(float(avg)) if avg is not None else None}
+        for d, avg in (
+            await session.execute(
+                select(day, func.avg(AgentScore.score))
+                .where(AgentScore.score.isnot(None))
+                .group_by(day)
+                .order_by(day)
+            )
+        ).all()
+    ]
+
+    # The agents worth naming: lowest scoring in the current period.
+    worst = [
+        {
+            "bot_id": r.bot_id,
+            "agent_name": r.agent_name,
+            "score": r.score,
+            "grade": r.grade,
+            "scan_id": r.scan_id,
+        }
+        for r in (
+            await session.execute(
+                select(AgentScore)
+                .where(AgentScore.scan_id.in_(cur_ids), AgentScore.score.isnot(None))
+                .order_by(AgentScore.score.asc())
+                .limit(5)
+            )
+        ).scalars().all()
+    ] if cur_ids else []
+
+    # The rules failing most often — what to fix once to fix it everywhere.
+    top_rules = [
+        {"rule_id": rule_id, "name": name, "severity": severity, "agents": int(count)}
+        for rule_id, name, severity, count in (
+            (
+                await session.execute(
+                    select(
+                        Finding.rule_id, Finding.name, Finding.severity, func.count()
+                    )
+                    .where(Finding.scan_id.in_(cur_ids), Finding.status == "fail")
+                    .group_by(Finding.rule_id, Finding.name, Finding.severity)
+                    .order_by(func.count().desc())
+                    .limit(5)
+                )
+            ).all()
+            if cur_ids
+            else []
+        )
+    ]
+
+    current = await _period_stats(session, cur_ids)
+    return {
+        "window_days": window_days,
+        "period_end": period_end.isoformat(),
+        "has_data": bool(cur_ids) and current["agents"] > 0,
+        "current": current,
+        "previous": await _period_stats(session, prev_ids),
+        "trend": trend,
+        "worst_agents": worst,
+        "top_rules": top_rules,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Agent creators
+#
+# Named honestly. The ask was for a tenant-users listing like the sibling
+# solutions have, and this app cannot build one: it has no directory data at
+# all — no user table, no Entra sync — because the worker reads Dataverse, not
+# Graph. The only trace of a person anywhere in this schema is the maker
+# Copilot Studio stamps on an agent.
+#
+# So this lists people who have *made* an agent, and says so. Calling it
+# "Tenant users" would have been a listing that silently omits everyone who has
+# never built an agent, which in most tenants is nearly everybody — a listing
+# that is wrong in a way the reader cannot see is worse than one with a
+# narrower name.
+# --------------------------------------------------------------------------- #
+@router.get("/agent-creators")
+async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[dict]:
+    """Every person recorded as creating an agent, with how their agents score.
+
+    Scores come from each agent's most recent scored appearance, so a creator's
+    average reflects the current state of their agents rather than whichever
+    scan happened to run last in their environment.
+
+    Deliberately four queries regardless of how many agents there are. The
+    personal view can afford a per-agent lookup because it only ever walks one
+    person's agents; this page walks every agent in the tenant, so the same
+    pattern would have been two queries per agent across potentially hundreds.
+    """
+    env_names = {
+        e.id: e.display_name
+        for e in (await session.execute(select(Environment))).scalars().all()
+    }
+
+    agents = (
+        await session.execute(
+            select(Agent).where(Agent.created_by_upn.isnot(None))
+        )
+    ).scalars().all()
+
+    # Latest scored appearance per agent, in one query: group to find each
+    # bot's newest capture, then join back for the whole row.
+    newest = (
+        select(
+            AgentScore.bot_id.label("bot_id"),
+            func.max(AgentScore.captured_at).label("ts"),
+        )
+        .where(AgentScore.bot_id.isnot(None))
+        .group_by(AgentScore.bot_id)
+        .subquery()
+    )
+    latest_by_bot: dict[str, AgentScore] = {}
+    for row in (
+        await session.execute(
+            select(AgentScore).join(
+                newest,
+                and_(
+                    AgentScore.bot_id == newest.c.bot_id,
+                    AgentScore.captured_at == newest.c.ts,
+                ),
+            )
+        )
+    ).scalars().all():
+        # Two scans can share a timestamp; first one wins, as the ordered
+        # per-agent query it replaces also did.
+        latest_by_bot.setdefault(row.bot_id, row)
+
+    # Open findings for every (scan, agent) pair, also in one query.
+    open_by_key: dict[tuple[int, str], int] = {
+        (scan_id, agent_name): int(count)
+        for scan_id, agent_name, count in (
+            await session.execute(
+                select(Finding.scan_id, Finding.agent_name, func.count())
+                .where(Finding.status == "fail", Finding.agent_name.isnot(None))
+                .group_by(Finding.scan_id, Finding.agent_name)
+            )
+        ).all()
+    }
+
+    # Group case-insensitively: Dataverse and Entra disagree about casing, and
+    # one person must not appear as two rows because of it.
+    creators: dict[str, dict] = {}
+    for agent in agents:
+        key = (agent.created_by_upn or "").lower()
+        if not key:
+            continue
+        row = creators.setdefault(
+            key,
+            {
+                "upn": agent.created_by_upn,
+                "display_name": agent.created_by_name,
+                "agents": 0,
+                "scores": [],
+                "grades": {g: 0 for g in _GRADES},
+                "open_findings": 0,
+                "environment_ids": set(),
+            },
+        )
+        # Prefer a real name over None if any of their agents carries one.
+        row["display_name"] = row["display_name"] or agent.created_by_name
+        row["agents"] += 1
+
+        score_row = latest_by_bot.get(agent.bot_id) if agent.bot_id else None
+        env_id = (
+            score_row.environment_id if score_row is not None else agent.environment_id
+        )
+        if env_id is not None:
+            row["environment_ids"].add(env_id)
+        if score_row is not None:
+            if score_row.score is not None:
+                row["scores"].append(score_row.score)
+            if score_row.grade in row["grades"]:
+                row["grades"][score_row.grade] += 1
+            row["open_findings"] += open_by_key.get(
+                (score_row.scan_id, score_row.agent_name), 0
+            )
+
+    out = []
+    for row in creators.values():
+        scores = row["scores"]
+        out.append(
+            {
+                "upn": row["upn"],
+                "display_name": row["display_name"],
+                "agents": row["agents"],
+                "scored_agents": len(scores),
+                "avg_score": round(sum(scores) / len(scores)) if scores else None,
+                "grades": row["grades"],
+                "open_findings": row["open_findings"],
+                "environments": sorted(
+                    env_names[e] for e in row["environment_ids"] if e in env_names
+                ),
+            }
+        )
+    # Worst average first: this page is opened to answer "who is making agents
+    # that need attention", and the default sort should answer it on arrival
+    # rather than after a click. Creators with nothing scored sort last — they
+    # are an unknown, not a problem.
+    out.sort(key=lambda r: (r["avg_score"] is None, r["avg_score"] or 0))
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # Personal view — "agents you created"
 #
 # This platform has no user dimension: the only trace of a person is the UPN
@@ -413,9 +765,16 @@ async def freshness(session: AsyncSession = Depends(get_session)) -> dict:
 # "which user?" parameter: if a caller could name the user, any viewer could
 # read someone else's agents by editing a URL.
 # --------------------------------------------------------------------------- #
-def _me_upn(user: CurrentUser) -> str:
-    """The signed-in person's UPN, or 404."""
-    if not user.upn:
+async def _me_upn(user: CurrentUser, session: AsyncSession) -> str:
+    """The signed-in person's UPN, or 404.
+
+    Goes through :func:`personal_view_upn` rather than reading the claim
+    directly, so the local admin standing in for a demo persona reaches these
+    routes too — otherwise the pages would render and every call behind them
+    would 404.
+    """
+    upn = await personal_view_upn(user, session)
+    if not upn:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
@@ -423,7 +782,7 @@ def _me_upn(user: CurrentUser) -> str:
                 "work account to see the agents you created."
             ),
         )
-    return user.upn
+    return upn
 
 
 async def _my_agent_rows(session: AsyncSession, upn: str) -> list[Agent]:
@@ -515,16 +874,24 @@ async def my_summary(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Rollup over the agents this person created."""
-    cards = await _my_agent_cards(session, _me_upn(user))
+    cards = await _my_agent_cards(session, await _me_upn(user, session))
     scored = [c["score"] for c in cards if c["score"] is not None]
     grades = [c["grade"] for c in cards if c["grade"]]
+    worst = max(grades) if grades else None
     return {
         "agents": len(cards),
         "scored_agents": len(scored),
         "avg_score": round(sum(scored) / len(scored)) if scored else None,
         # Worst grade is the useful one to surface: it is what needs attention.
-        "worst_grade": max(grades) if grades else None,
+        "worst_grade": worst,
+        # How many agents sit on that worst grade. One D is a bad afternoon;
+        # six is a pattern, and the tile should be able to say which.
+        "worst_grade_agents": sum(1 for g in grades if g == worst) if worst else 0,
         "open_findings": sum(c["open_findings"] for c in cards),
+        # How many agents carry at least one open finding. The total alone
+        # cannot distinguish one badly broken agent from twelve slightly
+        # untidy ones.
+        "agents_with_findings": sum(1 for c in cards if c["open_findings"] > 0),
         "environments": len({c["environment_id"] for c in cards}),
         "has_data": bool(cards),
     }
@@ -536,7 +903,7 @@ async def my_agents(
     session: AsyncSession = Depends(get_session),
 ) -> list[dict]:
     """Every agent this person created, with its latest score and open findings."""
-    return await _my_agent_cards(session, _me_upn(user))
+    return await _my_agent_cards(session, await _me_upn(user, session))
 
 
 @me_router.get("/agents/{bot_id}")
@@ -553,7 +920,7 @@ async def my_agent_detail(
     guessing ids would read other people's scorecards. A non-owner gets 404
     rather than 403 so the endpoint does not confirm that the id exists.
     """
-    upn = _me_upn(user)
+    upn = await _me_upn(user, session)
     agent = await session.scalar(
         select(Agent).where(
             Agent.bot_id == bot_id,
@@ -578,7 +945,7 @@ async def my_agent_history(
     session: AsyncSession = Depends(get_session),
 ) -> list[dict]:
     """Score history for one of this person's own agents."""
-    upn = _me_upn(user)
+    upn = await _me_upn(user, session)
     owned = await session.scalar(
         select(Agent.id).where(
             Agent.bot_id == bot_id,

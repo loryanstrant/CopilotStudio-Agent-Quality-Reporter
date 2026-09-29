@@ -29,9 +29,6 @@ export default {
         "sev-minor": "#E9C46A",
         "sev-info": "#8AB0AB",
       },
-      boxShadow: {
-        card: "0 2px 6px rgba(15,20,26,.06)",
-      },
     },
   },
   plugins: [],

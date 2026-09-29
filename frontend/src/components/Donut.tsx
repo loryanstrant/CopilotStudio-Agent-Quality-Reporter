@@ -1,4 +1,5 @@
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
+import { NEUTRAL } from "./chartTheme";
 
 interface Slice {
   label: string;
@@ -12,7 +13,7 @@ export default function Donut({ slices }: { slices: Slice[] }) {
   const total = slices.reduce((sum, s) => sum + s.value, 0);
   // Recharts renders nothing for an all-zero dataset, so fall back to a single
   // neutral ring that still shows the (zero) total.
-  const data = total > 0 ? slices : [{ label: "No checks", value: 1, color: "#cbd5e1" }];
+  const data = total > 0 ? slices : [{ label: "No checks", value: 1, color: NEUTRAL }];
 
   return (
     <div className="flex items-center gap-5">

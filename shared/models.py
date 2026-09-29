@@ -60,6 +60,18 @@ class AppConfig(Base):
     # to people a tenant had deliberately excluded.
     org_view_group_id: Mapped[str | None] = mapped_column(Text)
 
+    # Membership of this group grants administrator rights, so administering
+    # the app does not have to mean sharing one username and password. Blank
+    # grants admin to nobody: unlike the org view, administration fails closed.
+    admin_group_id: Mapped[str | None] = mapped_column(Text)
+
+    # The seeded agent creator the local admin stands in for while demo data is
+    # loaded. Agents are attributed by their creator's UPN and a password
+    # account has none, so without this the personal pages cannot be reached at
+    # all without Entra. Written only by an explicit demo seed, cleared with the
+    # demo data, and retired after the first successful real scan.
+    demo_persona_upn: Mapped[str | None] = mapped_column(Text)
+
     # Scan cadence: run every N hours (1..24; 24 = daily).
     schedule_interval_hours: Mapped[int] = mapped_column(Integer, default=24)
 

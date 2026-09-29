@@ -50,6 +50,7 @@ def _cfg_out(cfg: AppConfig | None) -> AppConfigOut:
         has_aoai_key=bool(cfg.aoai_key_encrypted),
         report_access_group_id=cfg.report_access_group_id,
         org_view_group_id=cfg.org_view_group_id,
+        admin_group_id=cfg.admin_group_id,
         schedule_interval_hours=cfg.schedule_interval_hours or 24,
         default_icon_hashes=list(cfg.default_icon_hashes or []),
         configured=bool(cfg.tenant_id and cfg.client_id and cfg.client_secret_encrypted),
@@ -91,6 +92,8 @@ async def put_config(
         cfg.report_access_group_id = body.report_access_group_id.strip() or None
     if body.org_view_group_id is not None:
         cfg.org_view_group_id = body.org_view_group_id.strip() or None
+    if body.admin_group_id is not None:
+        cfg.admin_group_id = body.admin_group_id.strip() or None
     if body.schedule_interval_hours is not None:
         cfg.schedule_interval_hours = max(1, min(body.schedule_interval_hours, 24))
     if body.default_icon_hashes is not None:

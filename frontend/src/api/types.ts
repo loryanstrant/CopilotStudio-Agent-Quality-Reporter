@@ -114,7 +114,9 @@ export interface MySummary {
   scored_agents: number;
   avg_score: number | null;
   worst_grade: string | null;
+  worst_grade_agents: number;
   open_findings: number;
+  agents_with_findings: number;
   environments: number;
   has_data: boolean;
 }
@@ -146,6 +148,7 @@ export interface AppConfig {
   has_aoai_key: boolean;
   report_access_group_id: string | null;
   org_view_group_id: string | null;
+  admin_group_id: string | null;
   schedule_interval_hours: number;
   configured: boolean;
   judge_configured: boolean;
@@ -174,14 +177,57 @@ export interface ScanProgress {
   started_at: string | null;
 }
 
+/** One period's worth of the executive briefing. Every figure is computed in
+ *  SQL; the page turns them into sentences but never invents one. */
+export interface BriefingPeriod {
+  agents: number;
+  avg_score: number | null;
+  environments: number;
+  grades: Record<string, number>;
+  open_findings: number;
+  findings_by_severity: Record<string, number>;
+}
+
+export interface BriefingRule {
+  rule_id: string;
+  name: string;
+  severity: string;
+  agents: number;
+}
+
+export interface BriefingAgent {
+  bot_id: string | null;
+  agent_name: string;
+  score: number | null;
+  grade: string | null;
+  scan_id: number;
+}
+
+export interface Briefing {
+  window_days: number;
+  period_end: string | null;
+  has_data: boolean;
+  current: BriefingPeriod;
+  previous: BriefingPeriod;
+  trend: { date: string; avg_score: number | null }[];
+  worst_agents: BriefingAgent[];
+  top_rules: BriefingRule[];
+}
+
+/** One person who has created at least one agent. Built from the maker stamped
+ *  on each agent — this app holds no directory data, so this is not, and is not
+ *  presented as, a listing of everyone in the tenant. */
+export interface AgentCreator {
+  upn: string;
+  display_name: string | null;
+  agents: number;
+  scored_agents: number;
+  avg_score: number | null;
+  grades: Record<string, number>;
+  open_findings: number;
+  environments: string[];
+}
+
 export function cleanPP(value: string | null | undefined): string {
   return (value || "").replace(/^\s*slide\s+\d+\s*[-–—:]\s*/i, "").trim();
 }
-
-export const GRADE_COLORS: Record<string, string> = {
-  A: "#2A9D8F",
-  B: "#52B788",
-  C: "#E9C46A",
-  D: "#F4A261",
-  F: "#E63946",
-};

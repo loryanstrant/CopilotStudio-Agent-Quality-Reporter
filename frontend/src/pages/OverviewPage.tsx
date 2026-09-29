@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
-import { AgentListItem, EnvironmentCard, GRADE_COLORS, ScanProgress } from "../api/types";
+import { AgentListItem, EnvironmentCard, ScanProgress } from "../api/types";
+import { gradeColor, scoreColor } from "../components/chartTheme";
 
 type SortKey = "agent_name" | "solution_name" | "publish_state" | "score" | "grade" | "environment_name";
 
@@ -14,7 +15,7 @@ function GradeBadge({ grade }: { grade: string | null }) {
   return (
     <span
       className="inline-grid place-items-center w-7 h-7 rounded-full text-white text-sm font-bold"
-      style={{ background: GRADE_COLORS[grade] || "#8D99AE" }}
+      style={{ background: gradeColor(grade) }}
     >
       {grade}
     </span>
@@ -23,7 +24,7 @@ function GradeBadge({ grade }: { grade: string | null }) {
 
 function ScoreBar({ score }: { score: number | null }) {
   const v = score ?? 0;
-  const color = v >= 75 ? "#2A9D8F" : v >= 60 ? "#E9C46A" : v >= 40 ? "#F4A261" : "#E63946";
+  const color = scoreColor(score);
   return (
     <div className="flex items-center gap-2 min-w-[120px]">
       <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded">

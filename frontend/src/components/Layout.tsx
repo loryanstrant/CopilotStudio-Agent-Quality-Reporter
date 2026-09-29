@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../theme/ThemeContext";
 import CopilotStudioLogo from "./CopilotStudioLogo";
+import SvgDefs from "./SvgDefs";
 
 function navClass({ isActive }: { isActive: boolean }): string {
   return [
@@ -15,7 +16,7 @@ function navClass({ isActive }: { isActive: boolean }): string {
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+    <div className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
       {children}
     </div>
   );
@@ -42,12 +43,17 @@ export default function Layout({ children }: { children: ReactNode }) {
   const isAdmin = user?.role === "admin";
   const personal = Boolean(user?.has_personal_view);
   const canViewOrg = Boolean(user?.can_view_org);
+  const identityName = user?.display_name || user?.upn || user?.username;
+  const identifier = user?.upn || user?.username;
 
   return (
     <div className="flex h-full">
+      {/* One hidden <defs> for every chart gradient, rendered once. SVG paint
+          references resolve document-wide, so no chart needs its own. */}
+      <SvgDefs />
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-3 px-5 py-5">
-          <CopilotStudioLogo size={32} className="shrink-0" />
+          <CopilotStudioLogo className="h-9 w-9 shrink-0" />
           <div>
             <div className="text-sm font-semibold text-brand-600 dark:text-brand-500">
               Copilot Studio
@@ -58,7 +64,12 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="flex-1 space-y-1 px-3">
-          {/* Two sections: what is yours, and what belongs to the organisation.
+          {/* Four sections, the same four in all four solutions: what is
+              yours, what belongs to the organisation, what an administrator
+              configures, and where to get help. Every item sits under one of
+              them — Rules, Settings and About previously sat under no heading
+              at all, trailing off the end of the Organisation block.
+
               The organisation links stay visible but locked when the person is
               outside the approved group — hiding them looks like a bug, and
               says nothing about who to ask. */}
@@ -77,6 +88,12 @@ export default function Layout({ children }: { children: ReactNode }) {
               <NavLink to={personal ? "/org" : "/"} className={navClass} end>
                 Overview
               </NavLink>
+              <NavLink to="/briefing" className={navClass}>
+                Briefing
+              </NavLink>
+              <NavLink to="/creators" className={navClass}>
+                Agent creators
+              </NavLink>
               <NavLink to="/history" className={navClass}>
                 History
               </NavLink>
@@ -84,6 +101,8 @@ export default function Layout({ children }: { children: ReactNode }) {
           ) : (
             <>
               <LockedNavItem label="Overview" />
+              <LockedNavItem label="Briefing" />
+              <LockedNavItem label="Agent creators" />
               <LockedNavItem label="History" />
               <p className="px-3 pb-1 pt-1 text-xs text-slate-400 dark:text-slate-500">
                 Limited to an approved group — ask your administrator.
@@ -92,15 +111,23 @@ export default function Layout({ children }: { children: ReactNode }) {
           )}
 
           {isAdmin && (
-            <NavLink to="/rules" className={navClass}>
-              Rules
-            </NavLink>
+            <>
+              <SectionLabel>Administration</SectionLabel>
+              <NavLink to="/rules" className={navClass}>
+                Rules
+              </NavLink>
+              <NavLink to="/settings" className={navClass}>
+                Settings
+              </NavLink>
+            </>
           )}
-          {isAdmin && (
-            <NavLink to="/settings" className={navClass}>
-              Settings
-            </NavLink>
-          )}
+
+          {/* The setup guide was routed at /help and linked from nowhere, so a
+              working page nobody could reach. It belongs beside About. */}
+          <SectionLabel>Help</SectionLabel>
+          <NavLink to="/help" className={navClass}>
+            Setup guide
+          </NavLink>
           <NavLink to="/about" className={navClass}>
             About
           </NavLink>
@@ -113,11 +140,26 @@ export default function Layout({ children }: { children: ReactNode }) {
             <span>{theme === "dark" ? "Dark" : "Light"} mode</span>
             <span aria-hidden>{theme === "dark" ? "🌙" : "☀️"}</span>
           </button>
+          {/* Name, then identifier, then role. The identifier is the UPN when
+              there is one, because that is what this app keys a person's
+              agents on — the local account name says nothing about who is on
+              screen. It is hidden when it would only repeat the line above. */}
           <div>
-            <div className="truncate font-medium text-slate-800 dark:text-slate-100" title={user?.username}>
-              {user?.username}
+            <div
+              className="truncate font-medium text-slate-800 dark:text-slate-100"
+              title={identityName}
+            >
+              {identityName}
             </div>
-            <div className="mb-3 text-xs uppercase tracking-wide text-slate-400">
+            {identifier && identifier !== identityName && (
+              <div
+                className="truncate text-xs text-slate-400 dark:text-slate-500"
+                title={identifier}
+              >
+                {identifier}
+              </div>
+            )}
+            <div className="mb-3 mt-1 text-xs uppercase tracking-wide text-slate-400">
               {user?.role}
             </div>
             <button

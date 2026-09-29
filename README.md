@@ -12,11 +12,42 @@ click.
 > Community project, MIT-licensed. Not covered by a Microsoft support agreement.
 ## Screenshots
 
+> These are **desktop dashboards**. They are built to be read on a laptop or a
+> meeting-room screen, and there is deliberately no phone layout.
+
+### Sign in
+
+Password sign-in for the admin account, with Entra single sign-on offered alongside it once a service principal is configured.
+
+![Sign in](docs/screenshots/login.png)
+
+### Your agents
+
+Where anyone signing in with a work account lands: the agents Copilot Studio records *them* as the maker of, how many are scored, the lowest grade among them, and how many findings are still open — with the step across to the organisation view shown, and locked with an explanation when they are outside the approved group.
+
+![Your agents](docs/screenshots/personal.png)
+
 ### Overview — every agent, every environment
 
 Pick an environment from the selector, or leave it on **All environments** to see every agent across your tenant, sorted by score. Each row shows the owning solution (display name), publish state, score bar, and grade.
 
 ![Overview](docs/screenshots/overview.png)
+
+### Executive briefing
+
+The whole tenant in a few sentences: how many agents scored what, the grade mix, open findings by severity, and how all of it has moved since the period before. Every number is calculated from your scans in SQL and every sentence is assembled from fixed thresholds — **there is no model anywhere in this path**, even though the app has an LLM judge configured. A briefing gets read aloud to customers, so it must never be able to invent a figure.
+
+It also names the rules failing on the most agents, which is usually the cheapest thing to fix: one instruction change that clears seven agents at once.
+
+![Executive briefing](docs/screenshots/briefing.png)
+
+### Agent creators
+
+Who is building the agents, and how their agents score — agent count, average score with its grade, grade spread, open findings and environments, filterable per column and sorted worst-average-first, because the question this page answers is "who needs help".
+
+This is **not** a tenant directory, and it does not pretend to be one. The app has no directory data at all: its worker reads Dataverse, not Microsoft Graph, so the only trace of a person in the database is the maker Copilot Studio stamps on an agent. Somebody who has never built an agent does not appear here.
+
+![Agent creators](docs/screenshots/creators.png)
 
 ### Agent scorecard
 
@@ -30,17 +61,55 @@ Password-protected console: manage environments (add, **edit**, test, scan, dele
 
 ![Admin](docs/screenshots/admin.png)
 
+Three separate Entra group fields live here, and they answer three different questions: **Report access** decides who may sign in at all, **Organisation view** decides who may see everyone else's agents, and **Admin group** decides who administers the app — so administration no longer has to be one password passed between people. The admin group **fails closed**: leave it blank and nobody gets admin by single sign-on, which is deliberately the opposite of the organisation-view field.
+
+### Rules
+
+Every rule in the catalogue, editable: enable or disable it, change its scoring weight, or reword the explanation your colleagues read.
+
+![Rules](docs/screenshots/rules.png)
+
+### History
+
+Past scans per environment with their scores and grades, so a change in quality can be traced to when it happened.
+
+![History](docs/screenshots/history.png)
+
+### Setup guide
+
+Everything needed to connect the reporter to your environments — the app registration script, the Dataverse tables it needs read access to, the per-environment application user, and what to check when something looks wrong. Linked under **Help**; it used to be routed but reachable from nowhere.
+
+![Setup guide](docs/screenshots/setup-guide.png)
+
 ### About
 
-App version/build, a plain-English explainer of how scoring works, and credits with links.
+App version/build, a plain-English explainer of how scoring works, data freshness, the rest of the suite, and credits.
 
 ![About](docs/screenshots/about.png)
 
 ### Dark mode
 
-Every page supports a light and dark theme.
+Every page supports a light and dark theme. Every screenshot above has a dark
+counterpart in [`docs/screenshots/`](docs/screenshots/):
+[sign in](docs/screenshots/login-dark.png) ·
+[your agents](docs/screenshots/personal-dark.png) ·
+[overview](docs/screenshots/overview-dark.png) ·
+[briefing](docs/screenshots/briefing-dark.png) ·
+[agent creators](docs/screenshots/creators-dark.png) ·
+[agent scorecard](docs/screenshots/agent-detail-dark.png) ·
+[rules](docs/screenshots/rules-dark.png) ·
+[history](docs/screenshots/history-dark.png) ·
+[settings](docs/screenshots/admin-dark.png) ·
+[setup guide](docs/screenshots/setup-guide-dark.png) ·
+[about](docs/screenshots/about-dark.png).
 
 ![Overview in dark mode](docs/screenshots/overview-dark.png)
+
+### Reading it without colour
+
+Nothing in this app means anything by colour alone. A grade always carries its **letter**, a severity always carries its **word**, a score always carries its **number**, and the briefing's movement marks are **▲ ▼ ■** rather than three shades of the same idea. Colour reinforces; it never carries.
+
+![Agent creators in dark mode](docs/screenshots/creators-dark.png)
 
 
 ## Deploy to Azure (one click)
@@ -92,8 +161,9 @@ progress. You can **Edit** an environment later to rename it or add Application 
 ### Enabling Entra ID single sign-on (optional)
 
 By default the dashboard is protected by the single admin password. You can additionally let
-colleagues sign in with their **work account** (read-only viewer) — administration stays behind
-the password.
+colleagues sign in with their **work account**. They are viewers unless they are in the
+**Admin group** configured in Settings, whose members administer the app on sign-in — see
+[Authentication](#authentication).
 
 Sign-in is performed by the app itself, so it works the same wherever you run it: Azure, Docker
 on a NAS, Kubernetes, anywhere. There is nothing to configure on the hosting platform.
@@ -158,6 +228,17 @@ Findings come from a **rule catalogue** ([`engine/rules/rule-catalogue.md`](engi
 - **Instruction quality (LLM judge, optional)** — clarity, persona, scope discipline, orchestrator/child patterns, and output-format guidance, scored by an Azure OpenAI / Foundry model against the instructions.
 
 Every rule is **editable** from the Rules page: enable/disable it, change its scoring weight, or reword its explanation. Scores are `100 − Σ(weights of failed rules)`, graded A ≥ 90, B ≥ 75, C ≥ 60, D ≥ 40, F below.
+
+### What it does with the scores
+
+- **Executive briefing** — the tenant in a few sentences, with this period against the one before it: agents, average score, grade mix, open findings by severity, the rules failing most often, and the lowest-scoring agents. Deterministic by design — every figure is SQL and every sentence is assembled from fixed thresholds, so a briefing can never invent a number in front of a customer.
+- **Agent creators** — everyone recorded as having made an agent, with their agent count, average score and grade, grade spread, open findings and environments. Sorted worst-first and filterable per column. Built from the makers stamped on agents, not from a directory the app does not have.
+- **Your agents** — the personal view, derived entirely from the signed-in identity in the token.
+- **History** — past scans per environment, so a change in quality has a date attached.
+- **Admin by Entra group** — administration can be granted to the members of a security group instead of being one shared password. Membership is re-read on every request, so removing someone bites in minutes rather than at their next sign-in, and an unset group grants admin to nobody.
+- **Who is signed in, by name** — the sidebar shows the Entra display name above the UPN above the role, rather than an email address on its own.
+
+Everything above reads correctly without colour: grades carry their letter, severities their word.
 
 > **Application Insights (AGT-007):** Copilot Studio stores the App Insights connection outside Dataverse, and its bot-management API rejects app-only tokens, so a service-principal scan can't read it. This rule is therefore **manual-review** — it never fails on absence. Connect an environment's App Insights in Admin and telemetry is confirmed automatically.
 
@@ -278,7 +359,16 @@ Just evaluating? Skip steps 3–5 and use **Settings → Demo data → Load demo
 
 ## Authentication
 
-- **Admin console** is always **password-protected** (JWT, seeded admin user).
+- **Admin console** is always **password-protected** (JWT, seeded admin user). That account is
+  break-glass and is not going away: it is how you sign in the first time and how you set the
+  admin group in the first place.
+- **Admin by group (optional)** — put an Entra security group's object ID in the *Admin group ID*
+  field in **Settings** and its members administer the app when they sign in with Entra.
+  Membership is evaluated **per request**, not baked into the token, so removing someone takes
+  effect within minutes rather than when their token expires. Leaving the field blank grants
+  admin to **nobody** — it fails closed, deliberately the opposite of the organisation-view
+  field, because administration has always been an explicit grant and upgrading must not hand it
+  to everyone who can sign in.
 - **Entra single sign-on (optional)** — the app runs the OpenID Connect sign-in itself, reusing the
   service principal you already configured, so colleagues can view the dashboard with their work
   account on any host. See [docs/deploy.md](docs/deploy.md#entra-single-sign-on-optional).

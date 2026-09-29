@@ -2,7 +2,9 @@
 
 Entra sign-in is run by the app itself (see ``api.oidc``), so it works on any
 host rather than only on Azure. The password gate remains the first-run and
-break-glass route, and administration stays behind it.
+break-glass route; administration is no longer confined to it, because members
+of the configured admin group get it on Entra sign-in too (see
+:func:`api.auth.is_admin`).
 """
 from __future__ import annotations
 
@@ -11,6 +13,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import (
@@ -18,7 +21,9 @@ from api.auth import (
     authenticate_user,
     can_view_org,
     create_access_token,
+    effective_role,
     get_current_user,
+    personal_view_upn,
 )
 from api.oidc import (
     STATE_COOKIE,
@@ -32,7 +37,7 @@ from api.oidc import (
 )
 from api.schemas import AuthConfigOut, LoginIn, TokenOut, UserOut
 from shared.db import get_session
-from shared.models import AppConfig
+from shared.models import Agent, AppConfig
 
 logger = logging.getLogger("api.auth")
 
@@ -57,6 +62,10 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
+    # No upn claim for a local account: it has no directory identity. While demo
+    # data is loaded the admin still gets a personal view, but that is decided
+    # per request from the demo persona rather than frozen into a token that
+    # would outlive the data it points at.
     token = create_access_token(user.username, user.role)
     return TokenOut(access_token=token, username=user.username, role=user.role)
 
@@ -138,6 +147,9 @@ async def oidc_callback(
     if group_id and not await is_group_member(principal, group_id, session):
         return _fail("You are not a member of the group allowed to view this report.")
 
+    # Entra sign-ins are always minted as viewers. Administrator rights are
+    # decided per request from the admin group (see api.auth.is_admin), so the
+    # role in the token is a floor, never the final word.
     token = create_access_token(
         principal.name,
         "viewer",
@@ -145,6 +157,7 @@ async def oidc_callback(
         # Agents are attributed by the creator's UPN, so the personal view
         # matches on this claim.
         upn=principal.name,
+        display_name=principal.display_name,
     )
     response = RedirectResponse(f"/#sso={token}", status_code=status.HTTP_302_FOUND)
     response.delete_cookie(STATE_COOKIE, path=_COOKIE_PATH)
@@ -156,9 +169,29 @@ async def me(
     user: CurrentUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> UserOut:
+    # The persona can grant a personal view without any claim in the token, so
+    # this is a per-request question rather than a property of the token.
+    me_upn = await personal_view_upn(user, session)
+    display_name, upn = user.display_name, user.upn
+    # A local admin standing in for a demo persona is, as far as the personal
+    # pages are concerned, that person — so the sidebar names them rather than
+    # the account. This app has no directory table, so the name comes from an
+    # agent they created, which is the only place it exists.
+    if me_upn and not user.upn:
+        upn = me_upn
+        creator = await session.scalar(
+            select(Agent)
+            .where(func.lower(Agent.created_by_upn) == me_upn.lower())
+            .where(Agent.created_by_name.isnot(None))
+            .limit(1)
+        )
+        if creator is not None:
+            display_name = creator.created_by_name
     return UserOut(
         username=user.username,
-        role=user.role,
+        role=await effective_role(user, session),
+        display_name=display_name,
+        upn=upn,
         can_view_org=await can_view_org(user, session),
-        has_personal_view=user.has_personal_view,
+        has_personal_view=bool(me_upn),
     )

@@ -4,6 +4,12 @@ import { api, clearToken, getToken, setToken } from "../api/client";
 interface User {
   username: string;
   role: string;
+  /** Entra's display name. Absent for the password admin and for tokens issued
+   *  before display names were carried, so the UI falls back to the username. */
+  display_name?: string | null;
+  /** The signed-in person's UPN — the identifier this app actually keys their
+   *  agents on. Absent for a local account with no directory identity. */
+  upn?: string | null;
   /** Whether this person may see organisation-wide reporting. Decided by the
    *  server on every request — never trust this for authorisation, it only
    *  drives what the UI offers. */

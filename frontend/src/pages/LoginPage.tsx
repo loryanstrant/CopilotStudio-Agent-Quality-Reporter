@@ -47,7 +47,7 @@ export default function LoginPage() {
           }}
         />
         <div className="relative flex items-center gap-3">
-          <CopilotStudioLogo size={44} className="drop-shadow" />
+          <CopilotStudioLogo className="h-14 w-14 drop-shadow" />
           <span className="text-lg font-semibold">
             Copilot Studio Agent Quality Reporter
           </span>
@@ -71,7 +71,7 @@ export default function LoginPage() {
       <div className="flex w-full items-center justify-center px-6 lg:w-1/2">
         <form onSubmit={onSubmit} className="w-full max-w-sm">
           <div className="mb-8 flex flex-col items-center text-center lg:hidden">
-            <CopilotStudioLogo size={56} />
+            <CopilotStudioLogo className="h-14 w-14" />
             <div className="mt-3 text-lg font-semibold text-brand-600 dark:text-brand-500">
               Copilot Studio Agent Quality Reporter
             </div>

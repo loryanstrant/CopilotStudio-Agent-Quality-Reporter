@@ -2,14 +2,15 @@
 
 Password gate backed by the ``app_users`` table (bcrypt), plus Entra sign-in
 (see :mod:`api.oidc`). Tokens are signed HS256 JWTs carrying the username
-(``sub``), the role, and — for Entra sign-ins — the Entra object ID and UPN.
+(``sub``), the role, and — for Entra sign-ins — the Entra object ID, UPN and
+display name, so the UI can greet the signed-in person by name.
 
 This platform has no user dimension of its own: an agent records only the UPN
 of whoever created it, so the personal view matches on the ``upn`` claim rather
 than an object ID.
 
 Three dependencies gate routes: :func:`get_current_user` (any authenticated
-user), :func:`require_admin` (admin role only) and :func:`require_org_view`
+user), :func:`require_admin` (administrators only) and :func:`require_org_view`
 (may see organisation-wide data).
 """
 from __future__ import annotations
@@ -39,9 +40,19 @@ class CurrentUser(BaseModel):
     # identity, so there is no "me" to filter their data down to.
     oid: str | None = None
     upn: str | None = None
+    # The Entra ``name`` claim. Absent for the password admin, and absent from
+    # tokens issued before display names were carried — callers must cope with
+    # None rather than assume it is set.
+    display_name: str | None = None
 
     @property
-    def has_personal_view(self) -> bool:
+    def has_token_identity(self) -> bool:
+        """Whether the token itself names a person.
+
+        Not the same question as "does this account have a personal view" —
+        while demo data is loaded the local admin has one without any claim.
+        Use :func:`personal_view_upn` for that; this is only the fast path.
+        """
         # Agents are attributed by UPN here, so a UPN alone is enough.
         return bool(self.upn or self.oid)
 
@@ -52,6 +63,7 @@ def create_access_token(
     *,
     oid: str | None = None,
     upn: str | None = None,
+    display_name: str | None = None,
 ) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.access_token_expire_minutes
@@ -61,6 +73,8 @@ def create_access_token(
         payload["oid"] = oid
     if upn:
         payload["upn"] = upn
+    if display_name:
+        payload["name"] = display_name
     return jwt.encode(payload, settings.secret_key, algorithm=_ALGORITHM)
 
 
@@ -102,11 +116,86 @@ async def get_current_user(
         role=payload.get("role", "viewer"),
         oid=payload.get("oid"),
         upn=payload.get("upn"),
+        display_name=payload.get("name"),
     )
 
 
-def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+async def is_admin(user: CurrentUser, session: AsyncSession) -> bool:
+    """Whether this user administers the app.
+
+    True for the local password account whose ``app_users`` row carries the
+    admin role, and for members of the configured Entra admin group.
+
+    Membership is evaluated per request rather than baked into the token, for
+    the same reason :func:`can_view_org` does it: the group check is already
+    cached for a few minutes, whereas a token lives for hours. Removing someone
+    from the group should bite in minutes, not at next sign-in.
+
+    Note the asymmetry with :func:`can_view_org`: an unset admin group grants
+    admin to *nobody*. Administration has always been an explicit grant, so an
+    empty field must fail closed rather than hand the keys to everyone who can
+    sign in.
+    """
+    if user.role == "admin":
+        return True
+
+    cfg = await session.get(AppConfig, 1)
+    group_id = (cfg.admin_group_id if cfg else None) or ""
+    if not group_id or not user.oid:
+        return False
+
+    from api.oidc import Principal, is_group_member
+
+    principal = Principal(object_id=user.oid, name=user.username, groups=[])
+    return await is_group_member(principal, group_id, session)
+
+
+async def personal_view_upn(user: CurrentUser, session: AsyncSession) -> str | None:
+    """The person whose agents this account may see as "mine", if any.
+
+    Normally that is the signed-in person themselves, taken from the UPN in the
+    token — this app has no user dimension, so the only trace of a person is the
+    UPN Copilot Studio stamps on an agent they created.
+
+    The exception is the local password account while demo data is loaded. It
+    has no directory identity of its own, so it stands in for the seeded demo
+    persona. Without that, the personal pages cannot be opened at all without
+    Entra, and anyone evaluating the product never sees them.
+
+    The binding is only ever written by an explicit demo seed, is cleared with
+    the demo data, and is retired after the first successful real scan — so a
+    real deployment that has never seeded returns None here and behaves exactly
+    as it did before.
+    """
+    if user.upn:
+        return user.upn
+    # Only the local administrator stands in for the persona. Any other local
+    # account is left as it was: the binding exists so whoever loaded the demo
+    # data can see the pages it unlocks, not so that every password account in
+    # the deployment inherits a fictional person.
     if user.role != "admin":
+        return None
+    cfg = await session.get(AppConfig, 1)
+    return (cfg.demo_persona_upn if cfg else None) or None
+
+
+async def effective_role(user: CurrentUser, session: AsyncSession) -> str:
+    """The role the UI should act on, after the admin group is considered.
+
+    The token's own role claim is not enough: an Entra sign-in is always minted
+    as a viewer, and admin is decided per request from group membership. Report
+    the token's role and the UI would hide administration from someone who can
+    reach the endpoints perfectly well.
+    """
+    return "admin" if await is_admin(user, session) else user.role
+
+
+async def require_admin(
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CurrentUser:
+    """Dependency that requires administrator rights."""
+    if not await is_admin(user, session):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
         )
@@ -129,7 +218,7 @@ async def can_view_org(user: CurrentUser, session: AsyncSession) -> bool:
     saw every environment's agents, so an unset field must not silently lock
     people out on upgrade.
     """
-    if user.role == "admin":
+    if await is_admin(user, session):
         return True
 
     cfg = await session.get(AppConfig, 1)
@@ -166,8 +255,11 @@ __all__ = [
     "authenticate_user",
     "can_view_org",
     "create_access_token",
+    "effective_role",
     "get_current_user",
     "get_session",
+    "is_admin",
+    "personal_view_upn",
     "require_admin",
     "require_org_view",
 ]
