@@ -214,6 +214,20 @@ export interface Briefing {
   top_rules: BriefingRule[];
 }
 
+/** One person who has created at least one agent. Built from the maker stamped
+ *  on each agent — this app holds no directory data, so this is not, and is not
+ *  presented as, a listing of everyone in the tenant. */
+export interface AgentCreator {
+  upn: string;
+  display_name: string | null;
+  agents: number;
+  scored_agents: number;
+  avg_score: number | null;
+  grades: Record<string, number>;
+  open_findings: number;
+  environments: string[];
+}
+
 export function cleanPP(value: string | null | undefined): string {
   return (value || "").replace(/^\s*slide\s+\d+\s*[-–—:]\s*/i, "").trim();
 }

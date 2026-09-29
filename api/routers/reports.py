@@ -607,6 +607,105 @@ async def briefing(
 
 
 # --------------------------------------------------------------------------- #
+# Agent creators
+#
+# Named honestly. The ask was for a tenant-users listing like the sibling
+# solutions have, and this app cannot build one: it has no directory data at
+# all — no user table, no Entra sync — because the worker reads Dataverse, not
+# Graph. The only trace of a person anywhere in this schema is the maker
+# Copilot Studio stamps on an agent.
+#
+# So this lists people who have *made* an agent, and says so. Calling it
+# "Tenant users" would have been a listing that silently omits everyone who has
+# never built an agent, which in most tenants is nearly everybody — a listing
+# that is wrong in a way the reader cannot see is worse than one with a
+# narrower name.
+# --------------------------------------------------------------------------- #
+@router.get("/agent-creators")
+async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[dict]:
+    """Every person recorded as creating an agent, with how their agents score.
+
+    Scores come from each agent's most recent scored appearance, so a creator's
+    average reflects the current state of their agents rather than whichever
+    scan happened to run last in their environment.
+    """
+    env_names = {
+        e.id: e.display_name
+        for e in (await session.execute(select(Environment))).scalars().all()
+    }
+
+    agents = (
+        await session.execute(
+            select(Agent).where(Agent.created_by_upn.isnot(None))
+        )
+    ).scalars().all()
+
+    # Group case-insensitively: Dataverse and Entra disagree about casing, and
+    # one person must not appear as two rows because of it.
+    creators: dict[str, dict] = {}
+    for agent in agents:
+        key = (agent.created_by_upn or "").lower()
+        if not key:
+            continue
+        row = creators.setdefault(
+            key,
+            {
+                "upn": agent.created_by_upn,
+                "display_name": agent.created_by_name,
+                "agents": 0,
+                "scores": [],
+                "grades": {g: 0 for g in _GRADES},
+                "open_findings": 0,
+                "environment_ids": set(),
+            },
+        )
+        # Prefer a real name over None if any of their agents carries one.
+        row["display_name"] = row["display_name"] or agent.created_by_name
+        row["agents"] += 1
+
+        score_row = (
+            await _latest_score(session, agent.bot_id) if agent.bot_id else None
+        )
+        env_id = (
+            score_row.environment_id if score_row is not None else agent.environment_id
+        )
+        if env_id is not None:
+            row["environment_ids"].add(env_id)
+        if score_row is not None:
+            if score_row.score is not None:
+                row["scores"].append(score_row.score)
+            if score_row.grade in row["grades"]:
+                row["grades"][score_row.grade] += 1
+            row["open_findings"] += await _open_findings(
+                session, score_row.scan_id, score_row.agent_name
+            )
+
+    out = []
+    for row in creators.values():
+        scores = row["scores"]
+        out.append(
+            {
+                "upn": row["upn"],
+                "display_name": row["display_name"],
+                "agents": row["agents"],
+                "scored_agents": len(scores),
+                "avg_score": round(sum(scores) / len(scores)) if scores else None,
+                "grades": row["grades"],
+                "open_findings": row["open_findings"],
+                "environments": sorted(
+                    env_names[e] for e in row["environment_ids"] if e in env_names
+                ),
+            }
+        )
+    # Worst average first: this page is opened to answer "who is making agents
+    # that need attention", and the default sort should answer it on arrival
+    # rather than after a click. Creators with nothing scored sort last — they
+    # are an unknown, not a problem.
+    out.sort(key=lambda r: (r["avg_score"] is None, r["avg_score"] or 0))
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # Personal view — "agents you created"
 #
 # This platform has no user dimension: the only trace of a person is the UPN

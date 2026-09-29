@@ -91,6 +91,9 @@ export default function Layout({ children }: { children: ReactNode }) {
               <NavLink to="/briefing" className={navClass}>
                 Briefing
               </NavLink>
+              <NavLink to="/creators" className={navClass}>
+                Agent creators
+              </NavLink>
               <NavLink to="/history" className={navClass}>
                 History
               </NavLink>
@@ -99,6 +102,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <>
               <LockedNavItem label="Overview" />
               <LockedNavItem label="Briefing" />
+              <LockedNavItem label="Agent creators" />
               <LockedNavItem label="History" />
               <p className="px-3 pb-1 pt-1 text-xs text-slate-400 dark:text-slate-500">
                 Limited to an approved group — ask your administrator.

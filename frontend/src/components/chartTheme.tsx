@@ -60,6 +60,18 @@ export function sevColor(severity: string | null | undefined): string {
   return (severity && SEV_COLORS[severity]) || NEUTRAL;
 }
 
+/** The grade a score earns. Mirrors engine/static_rules.py::grade_for_score.
+ *
+ *  Needed wherever a score is shown without a grade beside it: the band is the
+ *  judgement, and a tinted number carries that judgement in hue alone. */
+export function gradeForScore(score: number): string {
+  if (score >= 90) return "A";
+  if (score >= 75) return "B";
+  if (score >= 60) return "C";
+  if (score >= 40) return "D";
+  return "F";
+}
+
 /** A 0–100 score, banded onto the same palette the grades use.
  *
  *  The bands match the scorecard's grade boundaries, so a score bar and the

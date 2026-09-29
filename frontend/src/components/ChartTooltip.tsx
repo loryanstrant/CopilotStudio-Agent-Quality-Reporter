@@ -28,6 +28,10 @@ export default function ChartTooltip({
           const dot = typeof raw === "string" && raw.startsWith("url(") ? "#3b6ef5" : raw;
           const value =
             typeof entry.value === "number" ? entry.value.toLocaleString() : entry.value;
+          // Always give the row a word. Without this, a series with no `name`
+          // is identified by its dot alone — colour as the only signal, which
+          // is exactly what this app must never do.
+          const label = entry.name ?? entry.dataKey;
           return (
             <div
               key={i}
@@ -37,8 +41,8 @@ export default function ChartTooltip({
                 className="inline-block h-2 w-2 shrink-0 rounded-full"
                 style={{ backgroundColor: dot }}
               />
-              {entry.name !== undefined && (
-                <span className="text-slate-500 dark:text-slate-400">{entry.name}</span>
+              {label !== undefined && (
+                <span className="text-slate-500 dark:text-slate-400">{String(label)}</span>
               )}
               <span className="ml-auto pl-3 font-semibold tabular-nums">{value}</span>
             </div>

@@ -213,9 +213,14 @@ async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
         total_findings = 0
         scan_rows: list[Scan] = []
 
-        # One scan per environment per day for the last 14 days, so the history
-        # page and the per-agent trend lines have something to draw.
-        for day_offset in range(14, -1, -1):
+        # One scan per environment per day for the last fortnight, so the
+        # history page and the per-agent trend lines have something to draw —
+        # then weekly back to eight weeks, so the executive briefing has a
+        # *previous* period to compare against. Seeding a fortnight alone left
+        # it reporting "no comparable scan in the period before it", which is
+        # an honest answer to a question the demo should not be asking.
+        day_offsets = sorted(set(range(0, 15)) | set(range(21, 57, 7)), reverse=True)
+        for day_offset in day_offsets:
             started = now - timedelta(days=day_offset)
             for env in env_rows:
                 env_agents = [a for a in agent_rows if a.environment_id == env.id]
@@ -247,7 +252,10 @@ async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
                     score = 100
                     for rule_id, name, scope, severity, weight in _RULES:
                         # Older scans fail more often, so scores trend upward.
-                        fail_chance = 0.32 * (0.6 + day_offset / 25)
+                        # Scaled against the full eight-week history: against
+                        # the old fortnight it would drive the earliest scans
+                        # to near-total failure and flatten every agent to 0.
+                        fail_chance = 0.32 * (0.6 + day_offset / 90)
                         failed = rng.random() < fail_chance
                         manual = rule_id == "AGT-007"
                         status = "manual" if manual else ("fail" if failed else "pass")

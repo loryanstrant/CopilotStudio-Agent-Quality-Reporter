@@ -246,13 +246,22 @@ export default function DataTable<Row>({
   );
 }
 
+// Which way a column is sorted is shown by *which glyph is drawn*, not by the
+// colour of two glyphs that are always both present. Hue alone is not a signal
+// a colour-blind reader can use, and both arrows lit in different tints is
+// exactly that. The unsorted state keeps both, faintly, as an affordance.
 function SortIcon({ state }: { state: "asc" | "desc" | "none" }) {
-  const activeCls = "text-brand-600 dark:text-brand-400";
-  const idleCls = "text-slate-300 dark:text-slate-600";
+  if (state === "none") {
+    return (
+      <span className="inline-flex flex-col text-[8px] leading-[8px] text-slate-300 dark:text-slate-600">
+        <span>▲</span>
+        <span>▼</span>
+      </span>
+    );
+  }
   return (
-    <span className="inline-flex flex-col text-[8px] leading-[8px]">
-      <span className={state === "asc" ? activeCls : idleCls}>▲</span>
-      <span className={state === "desc" ? activeCls : idleCls}>▼</span>
+    <span className="text-[9px] leading-none text-brand-600 dark:text-brand-400">
+      {state === "asc" ? "▲" : "▼"}
     </span>
   );
 }
