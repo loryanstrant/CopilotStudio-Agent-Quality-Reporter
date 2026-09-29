@@ -258,7 +258,13 @@ async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
                         fail_chance = 0.32 * (0.6 + day_offset / 90)
                         failed = rng.random() < fail_chance
                         manual = rule_id == "AGT-007"
-                        status = "manual" if manual else ("fail" if failed else "pass")
+                        # "skipped" + manual_review=True is what the engine
+                        # actually emits for a rule it cannot score from the
+                        # export. The seeder used to invent a "manual" status,
+                        # which is not in the schema's vocabulary (pass | fail |
+                        # skipped) — so the findings table missed its style and
+                        # rendered the badge as "manual · manual".
+                        status = "skipped" if manual else ("fail" if failed else "pass")
                         if failed and not manual:
                             score -= weight
                         session.add(
@@ -301,9 +307,13 @@ async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
                             JudgeResult(
                                 scan_id=scan.id,
                                 agent_name=agent.display_name,
-                                clarity=rng.randint(4, 10),
+                                # The judge scores these 0-5 (engine/llm_judge.py)
+                                # and the UI renders them out of 5. Seeding 4-10
+                                # produced bars reading "8/5" that overflowed
+                                # their track.
+                                clarity=rng.randint(2, 5),
                                 persona_defined=rng.random() < 0.6,
-                                scope_discipline=rng.randint(3, 10),
+                                scope_discipline=rng.randint(2, 5),
                                 output_format_guidance=rng.random() < 0.5,
                                 orchestrator_pattern_detected=rng.random() < 0.25,
                                 child_pattern_detected=rng.random() < 0.2,

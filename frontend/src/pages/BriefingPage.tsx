@@ -47,6 +47,12 @@ function movementWord(d: number): string {
   return `${d > 0 ? "up" : "down"} ${Math.abs(d)}`;
 }
 
+/** "up 3 points" / "down 1 point" — the unit has to agree with the number, and
+ *  appending a bare " points" to movementWord() produced "down 1 points". */
+function movementPoints(d: number): string {
+  return `${movementWord(d)} ${Math.abs(d) === 1 ? "point" : "points"}`;
+}
+
 function countDelta(cur: number, prev: number): number | null {
   if (prev === 0 && cur === 0) return 0;
   return cur - prev;
@@ -77,7 +83,7 @@ function buildNarrative(b: Briefing): { tone: Tone; text: string }[] {
       ? ", with no comparable scan in the period before it"
       : dScore === 0
         ? ", unchanged against the previous period"
-        : `, ${movementWord(dScore)} ${Math.abs(dScore) === 1 ? "point" : "points"} on the previous period`;
+        : `, ${movementPoints(dScore)} on the previous period`;
   out.push({
     tone: dScore === null ? "neutral" : dScore >= 0 ? "positive" : "negative",
     text: `As at ${end}, ${plural(cur.agents, "agent")} across ${plural(
@@ -129,7 +135,7 @@ function buildHighlights(b: Briefing): string[] {
   const cur = b.current;
   const dScore = points(cur.avg_score, b.previous.avg_score);
   if (dScore !== null && dScore > 0)
-    items.push(`Average score ${movementWord(dScore)} points period-on-period.`);
+    items.push(`Average score ${movementPoints(dScore)} period-on-period.`);
   const dFindings = countDelta(cur.open_findings, b.previous.open_findings);
   if (dFindings !== null && dFindings < 0)
     items.push(`${Math.abs(dFindings)} fewer open findings than last period.`);
@@ -147,7 +153,7 @@ function buildWatchouts(b: Briefing): string[] {
   const cur = b.current;
   const dScore = points(cur.avg_score, b.previous.avg_score);
   if (dScore !== null && dScore < 0)
-    items.push(`Average score ${movementWord(dScore)} points versus the previous period.`);
+    items.push(`Average score ${movementPoints(dScore)} versus the previous period.`);
   const blockers = cur.findings_by_severity.blocker ?? 0;
   if (blockers > 0) items.push(`${plural(blockers, "blocker-severity finding")} open.`);
   const failing = (cur.grades.D ?? 0) + (cur.grades.F ?? 0);
@@ -271,7 +277,7 @@ export default function BriefingPage() {
         <KpiCard
           label="Environments"
           value={cur.environments}
-          hint={`${plural(cur.grades.F ?? 0, "agent")} at grade F`}
+          hint="Latest scan of each, compared like for like"
         />
       </div>
 

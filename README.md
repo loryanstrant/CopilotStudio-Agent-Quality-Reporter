@@ -75,15 +75,33 @@ Past scans per environment with their scores and grades, so a change in quality 
 
 ![History](docs/screenshots/history.png)
 
+### Setup guide
+
+Everything needed to connect the reporter to your environments — the app registration script, the Dataverse tables it needs read access to, the per-environment application user, and what to check when something looks wrong. Linked under **Help**; it used to be routed but reachable from nowhere.
+
+![Setup guide](docs/screenshots/setup-guide.png)
+
 ### About
 
-App version/build, a plain-English explainer of how scoring works, and credits with links.
+App version/build, a plain-English explainer of how scoring works, data freshness, the rest of the suite, and credits.
 
 ![About](docs/screenshots/about.png)
 
 ### Dark mode
 
-Every page supports a light and dark theme, and every screenshot above has a dark counterpart in [`docs/screenshots/`](docs/screenshots/).
+Every page supports a light and dark theme. Every screenshot above has a dark
+counterpart in [`docs/screenshots/`](docs/screenshots/):
+[sign in](docs/screenshots/login-dark.png) ·
+[your agents](docs/screenshots/personal-dark.png) ·
+[overview](docs/screenshots/overview-dark.png) ·
+[briefing](docs/screenshots/briefing-dark.png) ·
+[agent creators](docs/screenshots/creators-dark.png) ·
+[agent scorecard](docs/screenshots/agent-detail-dark.png) ·
+[rules](docs/screenshots/rules-dark.png) ·
+[history](docs/screenshots/history-dark.png) ·
+[settings](docs/screenshots/admin-dark.png) ·
+[setup guide](docs/screenshots/setup-guide-dark.png) ·
+[about](docs/screenshots/about-dark.png).
 
 ![Overview in dark mode](docs/screenshots/overview-dark.png)
 

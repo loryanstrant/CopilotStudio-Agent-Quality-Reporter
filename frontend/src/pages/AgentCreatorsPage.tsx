@@ -126,6 +126,9 @@ export default function AgentCreatorsPage() {
     {
       key: "spread",
       header: "Grade spread",
+      // Wide enough for four chips on one line. Left to collapse, the cell
+      // stacked them vertically and the row looked like an accident.
+      className: "min-w-[11rem]",
       // Not sortable: a spread has no single order, and pretending otherwise
       // would sort on whichever grade happened to be read first.
       render: (r) => <GradeSpread grades={r.grades} />,
