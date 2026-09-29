@@ -146,6 +146,7 @@ export interface AppConfig {
   has_aoai_key: boolean;
   report_access_group_id: string | null;
   org_view_group_id: string | null;
+  admin_group_id: string | null;
   schedule_interval_hours: number;
   configured: boolean;
   judge_configured: boolean;

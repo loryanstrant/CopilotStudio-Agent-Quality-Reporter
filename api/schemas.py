@@ -23,6 +23,9 @@ class TokenOut(BaseModel):
 class UserOut(BaseModel):
     username: str
     role: str
+    # Entra's display name. None for the password admin and for tokens issued
+    # before display names were carried, so the UI falls back to the username.
+    display_name: str | None = None
     # Whether this user may see organisation-wide data. Drives whether the SPA
     # offers the org view or shows it locked.
     can_view_org: bool = True
@@ -46,6 +49,7 @@ class AppConfigIn(BaseModel):
     aoai_key: str | None = None  # write-only
     report_access_group_id: str | None = None
     org_view_group_id: str | None = None
+    admin_group_id: str | None = None
     schedule_interval_hours: int | None = Field(default=None, ge=1, le=24)
     default_icon_hashes: list[str] | None = None
 
@@ -59,6 +63,7 @@ class AppConfigOut(BaseModel):
     has_aoai_key: bool = False
     report_access_group_id: str | None = None
     org_view_group_id: str | None = None
+    admin_group_id: str | None = None
     schedule_interval_hours: int = 24
     default_icon_hashes: list[str] = []
     configured: bool = False

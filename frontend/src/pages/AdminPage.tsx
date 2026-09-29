@@ -343,6 +343,13 @@ export default function AdminPage() {
               blank and the organisation view stays open to everyone who can
               sign in — which is what existing deployments expect. */}
           <Field label="Organisation view group ID (optional)" defaultValue={cfg.org_view_group_id || ""} onChange={(e) => setForm({ ...form, org_view_group_id: e.target.value })} />
+          {/* A third, separate group: its members administer the app when they
+              sign in with Entra, so administration is not one shared password.
+              Unlike the organisation view, leaving this blank grants admin to
+              nobody — administration has always been an explicit grant, so it
+              fails closed. The local admin account is unaffected, and is how
+              this field gets set in the first place. */}
+          <Field label="Admin group ID (optional)" defaultValue={cfg.admin_group_id || ""} onChange={(e) => setForm({ ...form, admin_group_id: e.target.value })} />
           <Field label="Foundry base URL" placeholder="https://x.openai.azure.com/openai/v1/" defaultValue={cfg.aoai_base_url || ""} onChange={(e) => setForm({ ...form, aoai_base_url: e.target.value })} />
           <Field label="Foundry model" placeholder="gpt-4.1" defaultValue={cfg.aoai_model || ""} onChange={(e) => setForm({ ...form, aoai_model: e.target.value })} />
           <Field label={`Foundry API key ${cfg.has_aoai_key ? "(set)" : ""}`} type="password" placeholder="••••••" onChange={(e) => setForm({ ...form, aoai_key: e.target.value })} />

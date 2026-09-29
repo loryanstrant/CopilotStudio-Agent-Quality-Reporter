@@ -108,8 +108,10 @@ export default function PersonalPage() {
             Your agents
           </h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Agents created by {user.username}, with their latest quality score and anything still
-            open.
+            {/* The display name when Entra sent one, otherwise the UPN: a
+                sentence about a person reads better with their name in it. */}
+            Agents created by {user.display_name ?? user.username}, with their latest quality
+            score and anything still open.
           </p>
         </div>
         <OrgViewBanner canViewOrg={user.can_view_org} />
