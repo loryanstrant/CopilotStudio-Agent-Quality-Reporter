@@ -201,23 +201,38 @@ async def peer_comparison(session: AsyncSession, *, upn: str) -> dict[str, Any]:
 
     Aggregates only — a mean per group, never a list of people. The team is the
     viewer's department, falling back to everyone sharing their manager, and is
-    **omitted entirely** below :data:`MIN_TEAM_PEERS` rather than drawn from a
-    group small enough to identify somebody.
+    **withheld** below :data:`MIN_TEAM_PEERS` rather than drawn from a group
+    small enough to identify somebody.
 
-    ``team_omitted_reason`` distinguishes the four ways a team can be missing,
-    because they are not the same thing and the wording on screen must not imply
-    a problem with the reader's directory record when there is none:
+    ``team_state`` states what the panel should do, rather than leaving it to be
+    inferred from a peer count of zero:
 
-    ``not_a_creator``
-        The viewer has created no agents, so there is no directory row for them
-        — the lookup is scoped to creators by design.
-    ``directory_unresolved``
-        They are a creator, but Graph has not resolved them (no consent yet, a
-        lookup that failed, or an address with no directory record).
-    ``unknown_team``
-        Resolved, but the tenant populates neither department nor manager.
+    ``shown``
+        A group was identified and is large enough.
     ``too_small``
-        A team was found and is being withheld to avoid identifying someone.
+        A group **was** identified and is being withheld for disclosure. The
+        label is still returned: the name of a team is not the disclosure, the
+        figure is.
+    ``unknown``
+        No group could be identified at all.
+
+    A department of one and a record with no department both yield zero peers and
+    are not the same situation, so the two are decided from whether a grouping
+    was *identified*, never from whether it was *populated*.
+
+    ``team_unknown_reason`` is set only alongside ``unknown``, and exists because
+    this app has a case its siblings cannot have:
+
+    ``no_directory_record``
+        The viewer has never created an agent, so the creator-scoped lookup has
+        never looked them up. There is nothing for an administrator to populate —
+        telling them to fill in a department would be advice that cannot work.
+    ``lookup_incomplete``
+        They are a creator, but the lookup has not resolved them (no consent yet,
+        or an address with no directory record).
+    ``not_populated``
+        Resolved, and the tenant populates neither department nor manager. This
+        is the one an administrator can actually fix in Entra.
     """
     key = (upn or "").lower()
     rollup = await creator_rollup(session)
@@ -235,26 +250,31 @@ async def peer_comparison(session: AsyncSession, *, upn: str) -> dict[str, Any]:
 
     peers: list[dict[str, Any]] = []
     team_label: str | None = None
-    reason: str | None = None
+    # Identified is tracked separately from populated: "we know which team you
+    # are in and it is small" is a different sentence from "we do not know which
+    # team you are in", and a zero peer count cannot tell them apart.
+    identified = False
+    unknown_reason: str | None = None
     my_directory = directory.get(key)
 
     if me is None:
-        reason = "not_a_creator"
+        unknown_reason = "no_directory_record"
     elif my_directory is None or not my_directory.resolved:
-        reason = "directory_unresolved"
+        unknown_reason = "lookup_incomplete"
     else:
         department = (my_directory.department or "").strip()
         if department:
+            identified = True
+            team_label = department
             peers = [
                 r
                 for k, r in rollup.items()
-                if k != key
-                and _department_of(directory.get(k)) == department.lower()
+                if k != key and _department_of(directory.get(k)) == department.lower()
             ]
-            team_label = department
         if len(peers) < MIN_TEAM_PEERS and my_directory.manager_id:
-            # Falling back does not relax the threshold: a department of one
-            # becoming a manager group of two is still a group of two.
+            # The fallback replaces the department group only when it actually
+            # yields more peers, and it does not relax the threshold: a
+            # department of one becoming a manager group of two fixes nothing.
             by_manager = [
                 r
                 for k, r in rollup.items()
@@ -262,17 +282,23 @@ async def peer_comparison(session: AsyncSession, *, upn: str) -> dict[str, Any]:
                 and directory.get(k) is not None
                 and directory.get(k).manager_id == my_directory.manager_id
             ]
-            if len(by_manager) > len(peers):
+            if not identified or len(by_manager) > len(peers):
+                identified = True
                 peers = by_manager
                 team_label = (
                     f"{my_directory.manager_name}'s team"
                     if my_directory.manager_name
                     else "your manager's team"
                 )
-        if not peers and not team_label:
-            reason = "unknown_team"
-        elif len(peers) < MIN_TEAM_PEERS:
-            reason = "too_small"
+        if not identified:
+            unknown_reason = "not_populated"
+
+    if len(peers) >= MIN_TEAM_PEERS:
+        team_state = "shown"
+    elif identified:
+        team_state = "too_small"
+    else:
+        team_state = "unknown"
 
     period_from, period_to = await _observed_period(session)
     result: dict[str, Any] = {
@@ -292,20 +318,23 @@ async def peer_comparison(session: AsyncSession, *, upn: str) -> dict[str, Any]:
             ),
         },
         "team": None,
-        "team_label": None,
+        # Returned even when withheld: the name of a group is not the figure.
+        "team_label": team_label,
         "team_size": len(peers),
-        "team_omitted_reason": reason,
+        "team_state": team_state,
+        "team_unknown_reason": unknown_reason if team_state == "unknown" else None,
+        # The floor travels with the answer, so the sentence on screen cannot
+        # drift away from the rule this function actually applied.
+        "min_team_peers": MIN_TEAM_PEERS,
     }
 
-    if len(peers) >= MIN_TEAM_PEERS:
+    if team_state == "shown":
         result["team"] = {
             "agents": _mean([float(r["agents"]) for r in peers]) or 0,
             "avg_score": _mean(
                 [float(r["avg_score"]) for r in peers if r["avg_score"] is not None]
             ),
         }
-        result["team_label"] = team_label
-        result["team_omitted_reason"] = None
     return result
 
 

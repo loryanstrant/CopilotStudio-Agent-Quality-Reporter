@@ -1,6 +1,6 @@
 import ChartCard from "./ChartCard";
 import { gradeColor, gradeForScore } from "./chartTheme";
-import type { PeerComparisonData, PeerSeries, TeamOmittedReason } from "../api/types";
+import type { PeerComparisonData, PeerSeries } from "../api/types";
 
 interface Measure {
   key: keyof PeerSeries;
@@ -48,30 +48,40 @@ function ordinal(n: number): string {
   return `${n}${suffixes[(v - 20) % 10] ?? suffixes[v] ?? suffixes[0]}`;
 }
 
-/** Why there is no team series. Four different reasons, four different sentences.
+/** The sentence for a withheld team.
  *
- *  `not_a_creator` matters most. The directory lookup is scoped to people who
- *  have built an agent — deliberately, because resolving everyone would be the
- *  tenant-wide sync this app refuses to do — so somebody who has built nothing
- *  has no directory row and therefore no team. Saying "your record has no
- *  department" there would blame the reader's Entra profile for a decision this
- *  app made. */
-function teamNote(
-  reason: TeamOmittedReason,
-  teamSize: number,
-): string {
-  switch (reason) {
-    case "too_small":
-      return `No team comparison: your team is too small to show without identifying someone (${teamSize} other ${
-        teamSize === 1 ? "person" : "people"
-      } who have created agents). A team average next to your own figure would give their numbers away.`;
-    case "unknown_team":
-      return "No team comparison: your directory record has no department or manager, so there is no group to compare you with.";
-    case "directory_unresolved":
-      return "No team comparison: we have not been able to look you up in the directory yet. An administrator can run the creator lookup from Settings.";
-    case "not_a_creator":
+ *  Told apart by `team_state`, never guessed from a peer count of zero: a
+ *  department of one and a record with no department both have no peers, and
+ *  saying "we don't know which team you're in" to somebody whose department is on
+ *  file is a false statement about their own data that points an administrator at
+ *  the wrong problem.
+ *
+ *  The floor comes from the response, so this copy cannot drift away from the
+ *  rule the endpoint applied.
+ *
+ *  `no_directory_record` is the case specific to this app, and the reason its
+ *  sentence offers no remedy: the creator lookup covers people who have built an
+ *  agent and nobody else, so there is nothing for an administrator to populate.
+ *  Telling this reader to fill in a department in Entra would be advice that
+ *  cannot work — their Entra record may be perfect and they would still see two
+ *  series. */
+function withheldNote(data: PeerComparisonData): string {
+  if (data.team_state === "too_small") {
+    const who =
+      data.team_size === 0
+        ? `you are the only person in ${data.team_label ?? "your team"} who has created an agent`
+        : `${data.team_label ?? "your team"} has ${data.team_size} other ${
+            data.team_size === 1 ? "person" : "people"
+          } who have created agents`;
+    return `No team comparison — ${who}, and a team average is only shown from ${data.min_team_peers}. Below that, the average and your own figure together would give an individual's number away.`;
+  }
+  switch (data.team_unknown_reason) {
+    case "no_directory_record":
+      return "No team comparison — you have not created an agent, so this report has never looked you up. It only ever looks up the people recorded as agent creators, never the whole tenant, so there is nothing missing from your directory record and nothing an administrator needs to change.";
+    case "lookup_incomplete":
+      return "No team comparison — the directory lookup has not resolved your account yet. An administrator can run it from Settings, which also reports whether the User.Read.All permission has been granted.";
     default:
-      return "No team comparison: you have not created an agent, so this report has no directory record for you. It looks up only the people who appear as agent creators — never the whole tenant — so there is nothing missing from your Entra profile.";
+      return "No team comparison — we don't know which team you're in, because your directory record has no department and no manager. Populating either in Entra will fill this in.";
   }
 }
 
@@ -83,7 +93,8 @@ function teamNote(
  * group is too small to show without identifying somebody".
  */
 export default function PeerComparison({ data }: { data: PeerComparisonData }) {
-  const hasTeam = data.team !== null;
+  // The server states this; the component never re-decides it.
+  const hasTeam = data.team_state === "shown" && data.team !== null;
   const subtitle = [
     hasTeam
       ? `You, your team (${data.team_label}) and the organisation`
@@ -96,7 +107,9 @@ export default function PeerComparison({ data }: { data: PeerComparisonData }) {
       <div className="space-y-5 text-sm">
         {MEASURES.map((m) => {
           const mine = data.mine[m.key];
-          const team = data.team ? data.team[m.key] : null;
+          // Follows the stated state, so a team series can never appear
+          // because a payload carried figures the state said to withhold.
+          const team = hasTeam && data.team ? data.team[m.key] : null;
           const org = data.organisation[m.key];
           const max = Math.max(mine ?? 0, team ?? 0, org ?? 0, 1);
           const pct = data.percentile[m.key];
@@ -166,7 +179,7 @@ export default function PeerComparison({ data }: { data: PeerComparisonData }) {
           ? `Averages only, never individual figures. Your team is ${data.team_size} other ${
               data.team_size === 1 ? "person" : "people"
             } who have created agents; the organisation is ${data.organisation_size}.`
-          : teamNote(data.team_omitted_reason ?? "not_a_creator", data.team_size)}
+          : withheldNote(data)}
       </p>
     </ChartCard>
   );

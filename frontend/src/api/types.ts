@@ -241,20 +241,30 @@ export function cleanPP(value: string | null | undefined): string {
 
 /** You, your team and your organisation, on the two measures this app has.
  *
- *  `team` is null when it is withheld, and `team_omitted_reason` says which of
- *  the four reasons applies — they are not interchangeable, and the sentence
- *  shown must not imply a problem with the reader's directory record when the
- *  real reason is that they have never created an agent. */
+ *  `team` is null when it is withheld, and `team_state` says why — stated by the
+ *  server rather than inferred, because a department of one and a record with no
+ *  department both have zero peers and are not the same situation. */
 export interface PeerSeries {
   agents: number;
   avg_score: number | null;
 }
 
-export type TeamOmittedReason =
-  | "not_a_creator"
-  | "directory_unresolved"
-  | "unknown_team"
-  | "too_small";
+/** What the panel should do about the team series. Stated by the server, never
+ *  inferred from a peer count — a department of one and a record with no
+ *  department both have zero peers and are not the same situation.
+ *
+ *  Three states, the same three in all four solutions. */
+export type TeamState = "shown" | "too_small" | "unknown";
+
+/** Why no group could be identified. Only set alongside `unknown`, and deliberately
+ *  *not* a fourth `TeamState`: the panel behaves identically in all three cases —
+ *  two series and a sentence — and only the sentence differs. `no_directory_record`
+ *  is specific to this app, where the lookup covers agent creators and nobody else,
+ *  so there is nothing an administrator could populate to fix it. */
+export type TeamUnknownReason =
+  | "no_directory_record"
+  | "lookup_incomplete"
+  | "not_populated";
 
 export interface PeerComparisonData {
   period_from: string | null;
@@ -263,7 +273,13 @@ export interface PeerComparisonData {
   team: PeerSeries | null;
   team_label: string | null;
   team_size: number;
-  team_omitted_reason: TeamOmittedReason | null;
+  /** Returned even when the team is withheld: the name of a group is not the
+   *  disclosure, the figure is. */
+  team_state: TeamState;
+  team_unknown_reason: TeamUnknownReason | null;
+  /** The disclosure floor, owned and enforced by the server, so the copy on
+   *  screen cannot drift away from the rule actually applied. */
+  min_team_peers: number;
   organisation: PeerSeries;
   organisation_size: number;
   percentile: { agents: number | null; avg_score: number | null };
