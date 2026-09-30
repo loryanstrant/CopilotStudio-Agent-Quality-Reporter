@@ -41,7 +41,7 @@ jobs:
         run: pytest -q
 
   frontend:
-    name: types and build
+    name: types, tests and build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -60,6 +60,13 @@ jobs:
 
       - name: Type-check
         run: npx tsc --noEmit
+
+      # The unit tests exist to pin a bug that was invisible until somebody
+      # clicked the right name: selecting a creator by substring also selected
+      # anybody whose address contained theirs. A regression test nothing runs
+      # is a comment.
+      - name: Unit tests
+        run: npm test
 
       - name: Build
         run: npm run build

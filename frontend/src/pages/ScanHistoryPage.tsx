@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { RunLogRow } from "../api/types";
 import ChartCard from "../components/ChartCard";
 import DataTable, { type Column } from "../components/DataTable";
+import PageHeader from "../components/PageHeader";
 import { gradeColor } from "../components/chartTheme";
 
 /**
@@ -188,16 +189,11 @@ export default function ScanHistoryPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          Scan history
-        </h1>
-        <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
-          Every scan and directory lookup this deployment has run, newest first — what kind it
-          was, how long it took, what it wrote and whether it worked. For how quality has
-          moved over time, see <strong>History</strong>.
-        </p>
-      </div>
+      <PageHeader title="Scan history">
+        Every scan and directory lookup this deployment has run, newest first — what kind it
+        was, how long it took, what it wrote and whether it worked. For how quality has
+        moved over time, see <strong>History</strong>.
+      </PageHeader>
 
       <ChartCard
         title={`${rows.length.toLocaleString()} run${rows.length === 1 ? "" : "s"}`}
@@ -221,6 +217,10 @@ export default function ScanHistoryPage() {
           filterable
           maxBodyHeight="max(240px, calc(100vh - 17rem))"
           emptyMessage="Nothing has run yet. Open Settings and use Scan now, or wait for the next scheduled scan."
+          // Runs exist; this filter just matches none of them. Saying "nothing
+          // has run yet" here would send somebody to Settings to start a scan
+          // they have already run.
+          noMatchMessage="No run matches the filters above."
         />
       </ChartCard>
     </div>

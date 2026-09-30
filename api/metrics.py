@@ -15,6 +15,7 @@ The vocabulary constants at the top are the single place the suite's messy
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -125,6 +126,43 @@ async def directory_by_upn(session: AsyncSession) -> dict[str, AgentCreator]:
     """The creator directory, keyed by lower-cased UPN."""
     rows = (await session.execute(select(AgentCreator))).scalars().all()
     return {r.upn: r for r in rows}
+
+
+# An Entra object id, with or without its dashes, sitting in front of a whole
+# sign-in address. Copilot Studio stamps this on an agent when the maker's
+# record has been through a rename or a delete — the tenant this was reported
+# from has one, a former employee, and it renders as a 55-character mash.
+_OID_PREFIXED_UPN = re.compile(
+    r"^(?:[0-9a-fA-F]{32}"
+    r"|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+    r"(?P<rest>[^@\s]+@[^@\s]+\.[^@\s]+)$"
+)
+
+
+def readable_upn(upn: str | None, *, resolved: bool) -> str | None:
+    """The sign-in address as it is worth showing, never as it is stored.
+
+    Display only. Nothing here writes back: the stored value is what Dataverse
+    recorded and is the thing to quote when someone asks why a creator will not
+    resolve.
+
+    The trim is deliberately timid, because a rule that mangles an unusual but
+    legitimate address is worse than leaving an ugly one alone. Three things
+    must all hold before a character is removed:
+
+    * the directory lookup **failed** for this person — a creator Entra
+      resolved is never touched, whatever their address looks like;
+    * the value starts with exactly an object id, dashed or not;
+    * what follows is itself a complete address — a local part, one ``@``, and
+      a dotted domain. An address whose local part happens to be 32 hex
+      characters leaves ``@…`` behind, which fails this and is left alone.
+
+    Anything else comes back unchanged, which is the acceptable answer.
+    """
+    if not upn or resolved:
+        return upn
+    match = _OID_PREFIXED_UPN.match(upn)
+    return match.group("rest") if match else upn
 
 
 async def creator_rollup(session: AsyncSession) -> dict[str, dict[str, Any]]:

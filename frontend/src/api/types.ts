@@ -217,8 +217,27 @@ export interface Briefing {
 /** One person who has created at least one agent. Built from the maker stamped
  *  on each agent — this app holds no directory data, so this is not, and is not
  *  presented as, a listing of everyone in the tenant. */
+/** One of a creator's agents, as listed underneath the creators table when
+ *  that creator is selected. Shaped like `AgentListItem` plus open findings. */
+export interface CreatorAgent {
+  bot_id: string | null;
+  agent_name: string | null;
+  solution_name: string | null;
+  publish_state: string | null;
+  score: number | null;
+  grade: string | null;
+  scan_id: number | null;
+  environment_id: number | null;
+  environment_name: string | null;
+  open_findings: number;
+}
+
 export interface AgentCreator {
   upn: string;
+  /** The sign-in address as it is worth showing. Identical to `upn` except for
+   *  an unresolved creator whose address carries an Entra object id in front of
+   *  it; the stored value is never modified, only displayed shorter. */
+  upn_display: string;
   display_name: string | null;
   /** Directory details, present once the creator lookup has resolved them.
    *  Null on an unresolved creator, who is still listed — by UPN. */
@@ -233,6 +252,8 @@ export interface AgentCreator {
   grades: Record<string, number>;
   open_findings: number;
   environments: string[];
+  /** This creator's agents, worst score first. */
+  agent_list: CreatorAgent[];
 }
 
 export function cleanPP(value: string | null | undefined): string {

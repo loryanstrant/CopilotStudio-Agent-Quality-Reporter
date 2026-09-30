@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { QualityTimeline, TimelineFilters } from "../api/types";
 import ChartCard from "../components/ChartCard";
 import MoversList from "../components/MoversList";
+import PageHeader from "../components/PageHeader";
 import QualityTrend from "../components/QualityTrend";
 
 /**
@@ -62,14 +63,11 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">History</h1>
-        <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
-          Average score over time, with the best and worst agent in each scan shaded behind
-          it — so a rising average that hides one agent falling apart is visible. Looking for
-          whether a scan ran? That is <strong>Scan history</strong>, under Administration.
-        </p>
-      </div>
+      <PageHeader title="History">
+        Average score over time, with the best and worst agent in each scan shaded behind
+        it — so a rising average that hides one agent falling apart is visible. Looking for
+        whether a scan ran? That is <strong>Scan history</strong>, under Administration.
+      </PageHeader>
 
       <div className="card flex flex-wrap items-end gap-4 p-4">
         <Picker
