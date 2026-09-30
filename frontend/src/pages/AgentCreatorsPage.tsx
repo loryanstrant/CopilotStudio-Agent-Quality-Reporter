@@ -342,7 +342,10 @@ export default function AgentCreatorsPage() {
           label="Creators below a C average"
           value={shown.needHelp}
           hint={
-            isFiltered
+            // "0 · of 0 in the tenant" is a clumsy way to say nobody is
+            // struggling, so the tenant-wide hint only appears when there is a
+            // tenant-wide figure worth comparing against.
+            isFiltered && all.needHelp > 0
               ? `of ${all.needHelp} in the tenant · under ${C_FLOOR} out of 100`
               : shown.needHelp > 0
                 ? `Averaging under ${C_FLOOR} out of 100`
@@ -353,7 +356,7 @@ export default function AgentCreatorsPage() {
           label="Open findings"
           value={shown.findings}
           hint={
-            isFiltered
+            isFiltered && all.findings > 0
               ? `of ${all.findings} across every creator`
               : shown.findings > 0
                 ? `On ${shown.withFindings} of ${plural(shown.creators, "creator")}`
