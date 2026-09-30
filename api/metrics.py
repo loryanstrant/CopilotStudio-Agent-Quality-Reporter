@@ -72,11 +72,20 @@ SCAN_SOURCE_LABELS = {
 }
 SCAN_TRIGGER_LABELS = {"manual": "Manual", "scheduled": "Scheduled"}
 
-# A team series is drawn only when the grouping holds at least this many people
-# besides the viewer. Below it, the team average plus the viewer's own figure
-# gives away an individual's number — exactly at n=1, and closely enough to
-# matter at 2 to 4. This is a disclosure rule, not a presentation preference;
+# A comparison series is drawn only when its group holds at least this many
+# people besides the viewer. Below it, the group's average plus the viewer's own
+# figure gives away an individual's number — exactly at n=1, and closely enough
+# to matter at 2 to 4. This is a disclosure rule, not a presentation preference;
 # see docs/specs/comparisons-and-timelines.md.
+#
+# It applies to the **organisation** series as well as the team, because the
+# arithmetic does not care what the group is called. That bites harder here than
+# in the sibling solutions: their comparison population is the tenant's Copilot
+# users, while this one is people who have created an agent *and* been resolved
+# through the directory — a set that is routinely in the tens even in a large
+# tenant, and can sit under this floor while the tenant itself is enormous. The
+# copy on screen therefore says how many creators there are, not how big the
+# tenant is.
 MIN_TEAM_PEERS = 5
 
 
@@ -300,22 +309,36 @@ async def peer_comparison(session: AsyncSession, *, upn: str) -> dict[str, Any]:
     else:
         team_state = "unknown"
 
+    # The organisation series is a mean over other people too, so it is subject to
+    # the same floor. A rank is the same disclosure by another route — in a group
+    # of four, "75th percentile" plus the reader's own figure locates somebody —
+    # so the percentile is withheld with it rather than left as a side channel.
+    organisation_shown = len(others) >= MIN_TEAM_PEERS
+
     period_from, period_to = await _observed_period(session)
     result: dict[str, Any] = {
         "period_from": period_from.isoformat() if period_from else None,
         "period_to": period_to.isoformat() if period_to else None,
+        # Always present. A viewer below the floor keeps their own figures and
+        # loses only the comparison — a blank panel would read as broken.
         "mine": mine,
-        "organisation": {
-            "agents": _mean(org_agents) or 0,
-            "avg_score": _mean(org_scores),
-        },
+        "organisation": (
+            {"agents": _mean(org_agents) or 0, "avg_score": _mean(org_scores)}
+            if organisation_shown
+            else None
+        ),
+        "organisation_state": "shown" if organisation_shown else "too_small",
         "organisation_size": len(others),
         "percentile": {
-            "agents": _percentile(float(mine["agents"]), org_agents),
+            "agents": _percentile(float(mine["agents"]), org_agents)
+            if organisation_shown
+            else None,
             "avg_score": _percentile(
                 float(mine["avg_score"]) if mine["avg_score"] is not None else None,
                 org_scores,
-            ),
+            )
+            if organisation_shown
+            else None,
         },
         "team": None,
         # Returned even when withheld: the name of a group is not the figure.

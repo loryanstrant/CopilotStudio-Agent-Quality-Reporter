@@ -150,7 +150,10 @@ async def test_a_department_of_one_reports_too_small_not_unknown():
     assert result["team_label"] == DEPT
     assert result["team_unknown_reason"] is None
     assert result["mine"]["agents"] == 1
-    assert result["organisation"]["avg_score"] == 20
+    # One other creator in the whole tenant, so the organisation series is
+    # withheld under the same floor — the viewer keeps their own figures.
+    assert result["organisation"] is None
+    assert result["organisation_state"] == "too_small"
 
 
 @pytest.mark.asyncio
@@ -309,9 +312,10 @@ async def test_the_three_unknown_reasons_are_told_apart_end_to_end():
         "unknown",
         "no_directory_record",
     )
-    # And in every case the organisation series is still drawn: the comparison is
+    # And in every case the wider series is still drawn: the comparison is
     # degraded, not absent.
     for result in (blank, pending, nobody):
+        assert result["organisation_state"] == "shown"
         assert result["organisation"]["avg_score"] is not None
         assert result["team"] is None
 
@@ -332,3 +336,53 @@ async def test_a_manager_group_is_identified_even_when_it_is_empty():
     assert result["team_size"] == 0
     assert result["team_label"] == "Dana Whitfield's team"
     assert result["team_unknown_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_the_organisation_series_is_withheld_below_the_same_floor():
+    """A mean identifies somebody whatever the group is called.
+
+    This matters more here than in the sibling solutions: their comparison
+    population is everyone with a Copilot licence, while this one is people who
+    have created an agent *and* resolved through the directory. A large tenant
+    with four people building agents lands below this floor, so the withholding is
+    routine rather than exceptional — and the copy must count creators rather than
+    calling the organisation small.
+    """
+    # Three other creators in total: two peers plus the outsider.
+    await build(2, me_agents=[80])
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+
+    assert result["organisation_size"] == 3
+    assert result["organisation_state"] == "too_small"
+    assert result["organisation"] is None
+    # A rank over three people is the same disclosure by another route.
+    assert result["percentile"] == {"agents": None, "avg_score": None}
+    # The viewer keeps their own figures: a blank panel reads as broken.
+    assert result["mine"] == {"agents": 1, "avg_score": 80}
+
+
+@pytest.mark.asyncio
+async def test_the_organisation_series_returns_at_the_floor():
+    await build(MIN_TEAM_PEERS, me_agents=[80])
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+
+    assert result["organisation_size"] == MIN_TEAM_PEERS + 1
+    assert result["organisation_state"] == "shown"
+    assert result["organisation"]["avg_score"] is not None
+    assert result["percentile"]["agents"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_viewer_with_no_agents_in_a_tiny_tenant_still_sees_themselves():
+    """Both series withheld, and the panel is still not blank."""
+    await build(1)
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn="newcomer@contoso.com")
+
+    assert result["organisation_state"] == "too_small"
+    assert result["team_state"] == "unknown"
+    assert result["mine"] == {"agents": 0, "avg_score": None}
+    assert result["min_team_peers"] == MIN_TEAM_PEERS

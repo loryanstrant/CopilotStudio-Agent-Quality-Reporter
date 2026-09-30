@@ -266,9 +266,13 @@ export type TeamUnknownReason =
   | "lookup_incomplete"
   | "not_populated";
 
+export type OrganisationState = "shown" | "too_small";
+
 export interface PeerComparisonData {
   period_from: string | null;
   period_to: string | null;
+  /** Always present. A viewer below the floor keeps their own figures and loses
+   *  only the comparison — a blank panel would read as broken. */
   mine: PeerSeries;
   team: PeerSeries | null;
   team_label: string | null;
@@ -280,7 +284,11 @@ export interface PeerComparisonData {
   /** The disclosure floor, owned and enforced by the server, so the copy on
    *  screen cannot drift away from the rule actually applied. */
   min_team_peers: number;
-  organisation: PeerSeries;
+  /** Null when withheld: the same disclosure floor applies to this series, since
+   *  the arithmetic does not care whether a group is called a team or a tenant. */
+  organisation: PeerSeries | null;
+  organisation_state: OrganisationState;
+  /** How many *other agent creators* there are — not the size of the tenant. */
   organisation_size: number;
   percentile: { agents: number | null; avg_score: number | null };
 }

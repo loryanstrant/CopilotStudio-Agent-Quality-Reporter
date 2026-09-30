@@ -65,6 +65,35 @@ function ordinal(n: number): string {
  *  Telling this reader to fill in a department in Entra would be advice that
  *  cannot work — their Entra record may be perfect and they would still see two
  *  series. */
+/** What the comparison population actually is, in this app.
+ *
+ *  Not the tenant. It is people recorded as having created an agent and resolved
+ *  through the directory, which in a real customer is tens of people inside a
+ *  tenant of thousands. Calling that bar "Organisation" invites the reader to
+ *  think they are being compared with their colleagues at large, and they are
+ *  not — so it is labelled for what it is, and the withheld sentence counts
+ *  creators rather than describing the tenant as small. */
+const ORG_LABEL = "All agent creators";
+
+/** The sentence for a withheld organisation series.
+ *
+ *  A mean plus the reader's own figure identifies somebody whatever the group is
+ *  called, so the same floor applies here — and it will be reached far more often
+ *  in this app than in its siblings, because the population is creators rather
+ *  than everyone with a licence. The copy therefore never says "your tenant is
+ *  small": a five-thousand-person tenant with four people building agents lands
+ *  here, and telling them their organisation is too small would be false. */
+function organisationWithheldNote(data: PeerComparisonData): string {
+  const others = data.organisation_size;
+  const who =
+    others === 0
+      ? "you are the only person who has created an agent"
+      : `only ${others + 1} people have created an agent`;
+  return `No comparison with other creators — ${who}, and an average is only shown from ${
+    data.min_team_peers
+  } others. Below that, the average and your own figure together would identify somebody. Your own figures are above; the percentile is held back for the same reason.`;
+}
+
 function withheldNote(data: PeerComparisonData): string {
   if (data.team_state === "too_small") {
     const who =
@@ -95,10 +124,15 @@ function withheldNote(data: PeerComparisonData): string {
 export default function PeerComparison({ data }: { data: PeerComparisonData }) {
   // The server states this; the component never re-decides it.
   const hasTeam = data.team_state === "shown" && data.team !== null;
+  const hasOrg = data.organisation_state === "shown" && data.organisation !== null;
   const subtitle = [
-    hasTeam
-      ? `You, your team (${data.team_label}) and the organisation`
-      : "You and the organisation",
+    hasTeam && hasOrg
+      ? `You, your team (${data.team_label}) and everyone who has created an agent`
+      : hasOrg
+        ? "You and everyone who has created an agent"
+        : hasTeam
+          ? `You and your team (${data.team_label})`
+          : "Your own figures",
     fmtPeriod(data.period_from, data.period_to),
   ].join(" · ");
 
@@ -110,7 +144,7 @@ export default function PeerComparison({ data }: { data: PeerComparisonData }) {
           // Follows the stated state, so a team series can never appear
           // because a payload carried figures the state said to withhold.
           const team = hasTeam && data.team ? data.team[m.key] : null;
-          const org = data.organisation[m.key];
+          const org = hasOrg && data.organisation ? data.organisation[m.key] : null;
           const max = Math.max(mine ?? 0, team ?? 0, org ?? 0, 1);
           const pct = data.percentile[m.key];
           const rows: { label: string; value: number | null; bar: string }[] = [
@@ -118,7 +152,9 @@ export default function PeerComparison({ data }: { data: PeerComparisonData }) {
             ...(team !== null
               ? [{ label: `Your team`, value: team, bar: "bg-brand-300" }]
               : []),
-            { label: "Organisation", value: org, bar: "bg-slate-400" },
+            ...(org !== null
+              ? [{ label: ORG_LABEL, value: org, bar: "bg-slate-400" }]
+              : []),
           ];
           return (
             <div key={m.key}>
@@ -129,8 +165,10 @@ export default function PeerComparison({ data }: { data: PeerComparisonData }) {
                 {pct !== null && (
                   <span className="text-xs text-slate-400 dark:text-slate-500">
                     {/* The population is stated: a team of six makes a
-                        team-relative percentile arithmetic, not information. */}
-                    {ordinal(pct)} percentile across the organisation
+                        team-relative percentile arithmetic, not information —
+                        and in this app the wider group is agent creators, not
+                        the tenant, which the wording has to admit. */}
+                    {ordinal(pct)} percentile among agent creators
                   </span>
                 )}
               </div>
@@ -178,9 +216,14 @@ export default function PeerComparison({ data }: { data: PeerComparisonData }) {
         {hasTeam
           ? `Averages only, never individual figures. Your team is ${data.team_size} other ${
               data.team_size === 1 ? "person" : "people"
-            } who have created agents; the organisation is ${data.organisation_size}.`
+            } who have created agents, out of ${data.organisation_size} in total.`
           : withheldNote(data)}
       </p>
+      {!hasOrg && (
+        <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+          {organisationWithheldNote(data)}
+        </p>
+      )}
     </ChartCard>
   );
 }

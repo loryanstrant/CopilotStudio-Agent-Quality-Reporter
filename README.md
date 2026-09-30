@@ -25,7 +25,9 @@ Password sign-in for the admin account, with Entra single sign-on offered alongs
 
 Where anyone signing in with a work account lands: the agents Copilot Studio records *them* as the maker of, how many are scored, the lowest grade among them, and how many findings are still open — with the step across to the organisation view shown, and locked with an explanation when they are outside the approved group.
 
-It also answers "am I doing this well?" two ways: their agents' **average score per scan**, as bars with a trend line over the last three, and **How you compare** — them, their team and the organisation, on agents created and average score, with their percentile stated against the organisation.
+It also answers "am I doing this well?" two ways: their agents' **average score per scan**, as bars with a trend line over the last three, and **How you compare** — them, their team, and everyone who has created an agent, on agents created and average score.
+
+The wider bar is labelled **All agent creators**, not "Organisation", because that is what it is: this app's comparison population is people recorded as making an agent, which in a real tenant is tens of people out of thousands. Both group series are withheld below five other people — the team *and* the creator population — because a group average next to your own figure identifies somebody whatever the group is called. Your own figures always stay.
 
 The team series is **withheld when the group is smaller than five other people**, and that is a disclosure rule rather than a preference: in a team of two, the team average next to your own figure gives the other person's exact number. Where it is withheld the panel says which of four reasons applies, and one of them is specific to this app — somebody who has never created an agent has no directory record here at all, because the lookup covers agent creators and nobody else. That is not a gap in their Entra profile, and the wording says so.
 
@@ -255,7 +257,7 @@ Every rule is **editable** from the Rules page: enable/disable it, change its sc
 
 - **Executive briefing** — the tenant in a few sentences, with this period against the one before it: agents, average score, grade mix, open findings by severity, the rules failing most often, and the lowest-scoring agents. Deterministic by design — every figure is SQL and every sentence is assembled from fixed thresholds, so a briefing can never invent a number in front of a customer.
 - **Agent creators** — everyone recorded as having made an agent, with their name, department and manager, agent count, average score and grade, grade spread, open findings and environments. Sorted worst-first and filterable per column. The directory details are an Entra lookup of **these people only** — never a tenant sync — and an unresolvable creator is kept, listed by sign-in address.
-- **Your agents** — the personal view, derived entirely from the signed-in identity in the token, with score-per-scan over time and a you / your team / your organisation comparison. The team series is withheld below five other people, so the comparison can never expose an individual's figures.
+- **Your agents** — the personal view, derived entirely from the signed-in identity in the token, with score-per-scan over time and a you / your team / all-agent-creators comparison. Both group series are withheld below five other people, and the percentile with them, so the comparison can never expose an individual's figures. The viewer keeps their own figures either way.
 - **History** — average score over time with the best-to-worst band behind it and the biggest movers since each agent was last measured, filterable by environment, creator and agent.
 - **Scan history** — the run log, under Administration: every scan and directory lookup with its kind, duration, what it wrote, and its failure reason. Part-finished scans are flagged.
 - **Admin by Entra group** — administration can be granted to the members of a security group instead of being one shared password. Membership is re-read on every request, so removing someone bites in minutes rather than at their next sign-in, and an unset group grants admin to nobody.
@@ -421,9 +423,11 @@ Just evaluating? Skip steps 3–5 and use **Settings → Demo data → Load demo
   shown so you know who to help, not to rank anyone.
 - The **creator lookup** sends Graph only the sign-in addresses already recorded on agents, and
   stores only display name, department, job title, office and manager. It never enumerates the
-  directory, and it never looks up somebody who has not built an agent. Team comparisons are
-  averages over at least five other people — an individual's figures are never shown to a
-  colleague.
+  directory, and it never looks up somebody who has not built an agent. Every comparison series
+  is an average over at least five other people — the team and the creator population alike, with
+  the percentile withheld alongside — so an individual's figures are never shown to a colleague.
+  In a tenant where only a handful of people build agents, that means the comparison shows your
+  own numbers and says why the rest is missing.
 - Application Insights (AGT-007) is always manual-review: Copilot Studio stores that connection
   outside Dataverse, so a service-principal scan cannot confirm it either way.
 - Demo data is clearly labelled as such in Settings, and is only ever created or removed by an
