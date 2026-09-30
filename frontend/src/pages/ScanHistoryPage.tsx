@@ -219,7 +219,7 @@ export default function ScanHistoryPage() {
           getRowKey={(r) => r.id}
           initialSort={{ key: "started_at", dir: "desc" }}
           filterable
-          maxBodyHeight={620}
+          maxBodyHeight="max(240px, calc(100vh - 17rem))"
           emptyMessage="Nothing has run yet. Open Settings and use Scan now, or wait for the next scheduled scan."
         />
       </ChartCard>
