@@ -279,8 +279,10 @@ export default function AgentCreatorsPage() {
   const isNarrowed = isFiltered || selectedUpn !== null;
   // Selection is identity, never "how many rows a substring happened to
   // leave". A UPN is unique per row, so this finds one person or nobody.
+  // Through applySelection, not a second hand-rolled find: the whole point of
+  // exporting it was that the page and the table narrow by one rule.
   const selected = selectedUpn
-    ? (rows.find((r) => r.upn === selectedUpn) ?? null)
+    ? (applySelection(rows, rowKey, selectedUpn)[0] ?? null)
     : null;
 
   const stats = useMemo(() => {
@@ -463,6 +465,20 @@ export default function AgentCreatorsPage() {
  *  Same columns and same click-through as the Overview list, because it is the
  *  same thing seen through a narrower window — an agent row that behaved
  *  differently here would be a second idiom for no gain. */
+/**
+ * Whether this agent has a scorecard to open.
+ *
+ * One predicate, because two were written independently and had already
+ * drifted: the row lit up on `scan_id` alone while the name only became a
+ * button when it also had a `bot_id`. Nothing enforces that those agree —
+ * `scan_id` is derived from `bot_id` in the endpoint today, which is an
+ * invariant held in another file — and when they disagree the row invites a
+ * click that goes nowhere, which is the exact thing this page was fixed for.
+ */
+function canOpenAgent(a: CreatorAgent): boolean {
+  return a.scan_id != null && !!a.bot_id;
+}
+
 function CreatorAgents({
   creator,
   onOpen,
@@ -480,7 +496,7 @@ function CreatorAgents({
       // from the keyboard. An agent no scan has looked at has no scorecard, so
       // it stays plain text rather than a control that goes nowhere.
       render: (a) =>
-        a.scan_id == null || !a.bot_id ? (
+        !canOpenAgent(a) ? (
           <span>{a.agent_name}</span>
         ) : (
           <button
@@ -572,7 +588,7 @@ function CreatorAgents({
         // would light up under the cursor and then do nothing, and a reader
         // concludes the table is broken rather than that the row is different.
         // Dimmed and captioned "Not scored yet" for the same reason.
-        isRowClickable={(a) => a.scan_id != null}
+        isRowClickable={canOpenAgent}
         rowClassName={(a) => (a.scan_id == null ? "opacity-60" : "")}
         emptyMessage="No agents recorded for this creator."
       />
