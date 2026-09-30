@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api import metrics
 from api.auth import (
     CurrentUser,
     get_current_user,
@@ -727,13 +728,35 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
                 (score_row.scan_id, score_row.agent_name), 0
             )
 
+    # Directory details, where the creator lookup has resolved them. This is the
+    # difference between a page of sign-in addresses and a page of colleagues —
+    # and the department is what makes "which team needs help" answerable.
+    #
+    # Unresolved creators keep their row and fall back to the name Dataverse
+    # stamped on the agent, then to the UPN. They are never dropped: that would
+    # silently remove their agents from the only page that counts them.
+    directory = await metrics.directory_by_upn(session)
+
     out = []
-    for row in creators.values():
+    for key, row in creators.items():
         scores = row["scores"]
+        entry = directory.get(key)
         out.append(
             {
                 "upn": row["upn"],
-                "display_name": row["display_name"],
+                "display_name": (
+                    (entry.display_name if entry and entry.display_name else None)
+                    or row["display_name"]
+                    or row["upn"]
+                ),
+                "department": entry.department if entry else None,
+                "job_title": entry.job_title if entry else None,
+                "manager_name": entry.manager_name if entry else None,
+                "office_location": entry.office_location if entry else None,
+                # Drives the "not in the directory" note on the row, so an
+                # address with no name beside it is explained rather than
+                # looking like missing data.
+                "directory_resolved": bool(entry and entry.resolved),
                 "agents": row["agents"],
                 "scored_agents": len(scores),
                 "avg_score": round(sum(scores) / len(scores)) if scores else None,
@@ -955,3 +978,119 @@ async def my_agent_history(
     if owned is None:
         raise HTTPException(status_code=404, detail="Agent not found")
     return await agent_history(bot_id=bot_id, session=session)
+
+
+# --------------------------------------------------------------------------- #
+# Quality over time
+#
+# The History page used to be a table of scans. It is now a trend: average score
+# per scan with the best-to-worst spread drawn behind it, plus what moved since
+# the scan before. The run log that table represented lives on its own page now,
+# under ADMINISTRATION — same source table, different question.
+# --------------------------------------------------------------------------- #
+@router.get("/quality-timeline")
+async def quality_timeline(
+    environment_id: int | None = None,
+    creator_upn: str | None = None,
+    bot_id: str | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Average score per scan with its spread, and the biggest movers.
+
+    One call rather than two: the movers are always read beside the line, and
+    two endpoints would let the filters drift apart between them.
+    """
+    points = await metrics.quality_timeline(
+        session,
+        environment_id=environment_id,
+        creator_upn=creator_upn,
+        bot_id=bot_id,
+    )
+    movers = await metrics.biggest_movers(
+        session,
+        environment_id=environment_id,
+        creator_upn=creator_upn,
+        bot_id=bot_id,
+    )
+    return {"points": points, **movers}
+
+
+@router.get("/timeline-filters")
+async def timeline_filters(session: AsyncSession = Depends(get_session)) -> dict:
+    """The environments, creators and agents the timeline can be filtered by.
+
+    Creators carry their directory display name when the lookup has resolved
+    them, so the filter reads as a list of colleagues rather than sign-in
+    addresses. An unresolved creator is listed by UPN — never dropped, which
+    would hide their agents from the filter that is supposed to find them.
+    """
+    envs = (
+        await session.execute(select(Environment).order_by(Environment.display_name))
+    ).scalars().all()
+    directory = await metrics.directory_by_upn(session)
+    rollup = await metrics.creator_rollup(session)
+
+    creators = []
+    for key, row in rollup.items():
+        entry = directory.get(key)
+        creators.append(
+            {
+                "upn": row["upn"],
+                "label": (entry.display_name if entry and entry.display_name else None)
+                or row["created_by_name"]
+                or row["upn"],
+                "department": entry.department if entry else None,
+                "agents": row["agents"],
+            }
+        )
+    creators.sort(key=lambda c: (c["label"] or "").lower())
+
+    agents = [
+        {"bot_id": a.bot_id, "label": a.display_name or a.bot_id}
+        for a in (
+            await session.execute(
+                select(Agent)
+                .where(Agent.bot_id.isnot(None))
+                .order_by(Agent.display_name)
+            )
+        ).scalars().all()
+    ]
+    return {
+        "environments": [
+            {"id": e.id, "label": e.display_name} for e in envs
+        ],
+        "creators": creators,
+        "agents": agents,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Personal comparison and timeline
+# --------------------------------------------------------------------------- #
+@me_router.get("/comparison")
+async def my_comparison(
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """How this person compares with their team and the organisation.
+
+    Aggregates only, and the team is withheld below five other people — see
+    :func:`api.metrics.peer_comparison`, where that rule and its four distinct
+    "no team" reasons are decided.
+    """
+    return await metrics.peer_comparison(session, upn=await _me_upn(user, session))
+
+
+@me_router.get("/score-timeline")
+async def my_score_timeline(
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """This person's agents' average score per scan.
+
+    Filtered to their own agents by the UPN in the token, like every other route
+    on this router.
+    """
+    return await metrics.quality_timeline(
+        session, creator_upn=await _me_upn(user, session)
+    )

@@ -6,7 +6,7 @@ or to demo the reporter before wiring up a tenant.
 
 Run inside the container / venv::
 
-    python -m scripts.seed_demo                   # 3 environments, ~18 agents
+    python -m scripts.seed_demo                   # 3 environments, ~40 agents
     python -m scripts.seed_demo --agents 40 --reset
     python -m scripts.seed_demo --clear
 
@@ -29,14 +29,17 @@ from sqlalchemy import delete, select
 from shared.db import SessionLocal
 from shared.models import (
     Agent,
+    AgentCreator,
     AgentScore,
     AppConfig,
     Environment,
     Finding,
+    JobRun,
     JudgeResult,
     Scan,
     TelemetrySnapshot,
 )
+from worker.creators import JOB_NAME as CREATOR_JOB_NAME
 
 _ENVIRONMENTS = [
     ("Contoso (default)", "https://contoso.crm6.dynamics.com"),
@@ -66,7 +69,60 @@ _MAKERS = [
     ("Priya Raman", "priya.raman@contoso.local", 3),
     ("Tom Hargreaves", "tom.hargreaves@contoso.local", 2),
     ("Sofia Marchetti", "sofia.marchetti@contoso.local", 1),
+    ("Daniel Whitlock", "daniel.whitlock@contoso.local", 4),
+    ("Grace Oyelaran", "grace.oyelaran@contoso.local", 3),
+    ("Hiro Tanaka", "hiro.tanaka@contoso.local", 3),
+    ("Elena Kovács", "elena.kovacs@contoso.local", 2),
+    ("Marcus Delaney", "marcus.delaney@contoso.local", 2),
+    ("Aisha Rahman", "aisha.rahman@contoso.local", 2),
+    ("Callum Reid", "callum.reid@contoso.local", 1),
+    ("Yara Haddad", "yara.haddad@contoso.local", 1),
 ]
+
+# Two departments, assigned by **round robin** rather than at random, and
+# fourteen makers rather than six. Both numbers are load-bearing.
+#
+# The team comparison withholds a team below five people other than the viewer
+# (a disclosure rule — see docs/specs/comparisons-and-timelines.md). Random
+# assignment over a small population produced departments of three, so the
+# comparison the demo exists to show never appeared; and a single department
+# makes the team average and the organisation average the same number, which
+# renders as three identical bars and reads as a bug even though it is correct.
+#
+# Round-robin over an even count guarantees seven per department: six peers each,
+# which clears the threshold with one to spare. The threshold is never lowered to
+# make the panel appear.
+_DEPARTMENTS = ["Customer Operations", "Finance & Corporate Services"]
+
+# The managers are deliberately **not** makers: in a real tenant the person a
+# team reports to usually has not built an agent themselves, so they have no row
+# in agent_creators — which is exactly the case the manager fallback has to cope
+# with.
+_DEPARTMENT_MANAGERS = {
+    "Customer Operations": ("mgr-cust-ops", "Dana Whitfield"),
+    "Finance & Corporate Services": ("mgr-fin-corp", "Karl Osei"),
+}
+
+_OFFICES = ["Melbourne", "Sydney", "Remote — AU"]
+
+_JOB_TITLES = [
+    "Business Analyst",
+    "Process Lead",
+    "Service Designer",
+    "Operations Manager",
+    "Automation Specialist",
+]
+
+
+def _maker_department(index: int) -> str:
+    """Round robin, so every department is the same size by construction."""
+    return _DEPARTMENTS[index % len(_DEPARTMENTS)]
+
+
+# One creator the directory cannot resolve, because that path has to be visible
+# in the demo: a service account that built an agent, kept and shown by its UPN
+# rather than dropped. Dropping it would take its agent out of every listing.
+_UNRESOLVED_MAKER = ("svc-agentbuilder", "svc-agentbuilder@contoso.local", 1)
 
 # The maker the local admin account is bound to when demo data is loaded, so
 # whoever is evaluating the product lands on a personal view with agents in it.
@@ -136,7 +192,7 @@ async def _bind_persona(session, upn: str | None) -> None:
     cfg.demo_persona_upn = upn
 
 
-async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
+async def seed(agents: int = 40, reset: bool = True) -> dict[str, int]:
     """Populate the reporting tables with plausible fictional data.
 
     Returns a stats dict so callers (CLI and the admin endpoint) can report what
@@ -149,6 +205,8 @@ async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
         if reset:
             # Fact tables only. Credentials and accounts are untouched; the
             # only app_config field written is the demo persona, at the end.
+            await session.execute(delete(JobRun))
+            await session.execute(delete(AgentCreator))
             await session.execute(delete(TelemetrySnapshot))
             await session.execute(delete(JudgeResult))
             await session.execute(delete(Finding))
@@ -179,11 +237,14 @@ async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
             # The first agent always belongs to the maker the local admin is
             # bound to, so a freshly seeded demo never opens on an empty
             # personal page however small --agents is.
-            maker = (
-                _DEMO_ADMIN_MAKER
-                if i == 0
-                else rng.choices(_MAKERS, weights=maker_weights, k=1)[0]
-            )
+            if i == 0:
+                maker = _DEMO_ADMIN_MAKER
+            elif i == 1:
+                # Guaranteed, so the "creator we cannot resolve" row always
+                # exists however small --agents is.
+                maker = _UNRESOLVED_MAKER
+            else:
+                maker = rng.choices(_MAKERS, weights=maker_weights, k=1)[0]
             maker_name, maker_upn, _ = maker
             agent_rows.append(
                 Agent(
@@ -348,6 +409,51 @@ async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
                 scan.score = avg
                 scan.grade = _grade(avg)
 
+        # A scan that failed, and one that only got part-way. Both states exist
+        # in production and neither was reachable in a demo, so nobody had ever
+        # seen what Scan history looks like when something goes wrong — which is
+        # the state the page exists for.
+        broken_at = now - timedelta(days=9, hours=7)
+        session.add(
+            Scan(
+                environment_id=env_rows[-1].id,
+                solution_name="Demo solution",
+                source="demo",
+                trigger="scheduled",
+                status="failed",
+                started_at=broken_at,
+                finished_at=broken_at + timedelta(seconds=41),
+                agent_count=0,
+                agents_done=0,
+                engine_version="demo",
+                catalogue_hash="demo",
+                detail=(
+                    "Dataverse returned 401 Unauthorized. The application user "
+                    "may have been removed from this environment."
+                ),
+            )
+        )
+        partial_at = now - timedelta(days=4, hours=3)
+        session.add(
+            Scan(
+                environment_id=env_rows[1].id,
+                solution_name="Demo solution",
+                source="demo",
+                trigger="manual",
+                status="complete",
+                started_at=partial_at,
+                finished_at=partial_at + timedelta(minutes=3),
+                agent_count=len([a for a in agent_rows if a.environment_id == env_rows[1].id]),
+                agents_done=1,
+                engine_version="demo",
+                catalogue_hash="demo",
+                detail="Stopped early: the scan was cancelled from Settings.",
+            )
+        )
+
+        await _seed_creator_directory(session, now)
+        await _seed_job_runs(session, rng, now)
+
         await _bind_persona(session, _DEMO_ADMIN_MAKER[1])
         await session.commit()
 
@@ -359,9 +465,87 @@ async def seed(agents: int = 18, reset: bool = True) -> dict[str, int]:
     }
 
 
+async def _seed_creator_directory(session, now: datetime) -> None:
+    """Directory rows for the seeded makers, as a Graph lookup would leave them.
+
+    Demo data never calls Graph — there are no credentials configured and there
+    must be no possibility of a tenant call from seeded data — so the rows the
+    sync would have written are written here instead. Without them the creators
+    listing shows sign-in addresses and the team comparison has no departments
+    to group by, which is most of what this release added.
+    """
+    for index, (name, upn, _weight) in enumerate(_MAKERS):
+        department = _maker_department(index)
+        manager_id, manager_name = _DEPARTMENT_MANAGERS[department]
+        session.add(
+            AgentCreator(
+                upn=upn.lower(),
+                entra_user_id=f"demo-{index:02d}",
+                display_name=name,
+                department=department,
+                job_title=_JOB_TITLES[index % len(_JOB_TITLES)],
+                office_location=_OFFICES[index % len(_OFFICES)],
+                manager_id=manager_id,
+                manager_name=manager_name,
+                resolved=True,
+                updated_at=now,
+            )
+        )
+    # The one the directory could not resolve. Kept, with the reason, so it shows
+    # by UPN wherever creators are listed.
+    session.add(
+        AgentCreator(
+            upn=_UNRESOLVED_MAKER[1].lower(),
+            display_name=None,
+            resolved=False,
+            error="No directory record for this sign-in address.",
+            updated_at=now,
+        )
+    )
+
+
+async def _seed_job_runs(session, rng: random.Random, now: datetime) -> None:
+    """A fortnight of creator-directory runs, including one that failed.
+
+    ``job_runs`` had never been written by this app at all, so Scan history's
+    second source was always empty and the failed-run rendering was untestable
+    without breaking something for real.
+    """
+    for day_offset in range(14, 0, -1):
+        started = now - timedelta(days=day_offset, minutes=rng.randint(0, 40))
+        failed = day_offset == 6
+        session.add(
+            JobRun(
+                job_name=CREATOR_JOB_NAME,
+                started_at=started,
+                finished_at=started + timedelta(seconds=rng.randint(2, 20)),
+                status="failed" if failed else "success",
+                stats=(
+                    {
+                        "creators": len(_MAKERS) + 1,
+                        "error": (
+                            "Graph refused the directory lookup (403). The app "
+                            "registration needs the User.Read.All application "
+                            "permission with admin consent."
+                        ),
+                    }
+                    if failed
+                    else {
+                        "creators": len(_MAKERS) + 1,
+                        "resolved": len(_MAKERS),
+                        "unresolved": 1,
+                        "lookup_errors": 0,
+                    }
+                ),
+            )
+        )
+
+
 async def clear() -> dict[str, int]:
     """Remove all seeded data, leaving credentials and accounts intact."""
     async with SessionLocal() as session:
+        await session.execute(delete(JobRun))
+        await session.execute(delete(AgentCreator))
         await session.execute(delete(TelemetrySnapshot))
         await session.execute(delete(JudgeResult))
         await session.execute(delete(Finding))
@@ -379,7 +563,7 @@ async def clear() -> dict[str, int]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed demo agent-quality data.")
-    parser.add_argument("--agents", type=int, default=18)
+    parser.add_argument("--agents", type=int, default=40)
     parser.add_argument("--reset", action="store_true")
     parser.add_argument("--clear", action="store_true", help="Clear data and exit")
     args = parser.parse_args()

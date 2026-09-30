@@ -76,8 +76,19 @@ export default function SetupGuidePage() {
           ))}
         </div>
         <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
-          <span className="font-medium">Directory.Read.All</span> on Microsoft Graph is only
-          needed if you restrict dashboard viewers to an Entra security group.
+          Two optional Microsoft Graph application permissions:{" "}
+          <span className="font-medium">Directory.Read.All</span> only if you restrict dashboard
+          viewers, the organisation view or admin rights to an Entra security group; and{" "}
+          <span className="font-medium">User.Read.All</span> to resolve agent creators to names,
+          departments and managers — which is what turns the Agent creators listing into
+          colleagues rather than sign-in addresses and makes the you / your team / your
+          organisation comparison possible.
+        </p>
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+          The creator lookup asks Graph only about sign-in addresses already recorded on an agent,
+          one person at a time. It never lists your directory, and somebody who has not built an
+          agent is never looked up. Without the permission nothing breaks: creators keep showing
+          as sign-in addresses, and Settings says which permission is missing.
         </p>
       </div>
 

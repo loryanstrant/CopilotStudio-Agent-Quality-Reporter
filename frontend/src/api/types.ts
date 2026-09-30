@@ -220,6 +220,13 @@ export interface Briefing {
 export interface AgentCreator {
   upn: string;
   display_name: string | null;
+  /** Directory details, present once the creator lookup has resolved them.
+   *  Null on an unresolved creator, who is still listed — by UPN. */
+  department: string | null;
+  job_title: string | null;
+  manager_name: string | null;
+  office_location: string | null;
+  directory_resolved: boolean;
   agents: number;
   scored_agents: number;
   avg_score: number | null;
@@ -230,4 +237,124 @@ export interface AgentCreator {
 
 export function cleanPP(value: string | null | undefined): string {
   return (value || "").replace(/^\s*slide\s+\d+\s*[-–—:]\s*/i, "").trim();
+}
+
+/** You, your team and your organisation, on the two measures this app has.
+ *
+ *  `team` is null when it is withheld, and `team_state` says why — stated by the
+ *  server rather than inferred, because a department of one and a record with no
+ *  department both have zero peers and are not the same situation. */
+export interface PeerSeries {
+  agents: number;
+  avg_score: number | null;
+}
+
+/** What the panel should do about the team series. Stated by the server, never
+ *  inferred from a peer count — a department of one and a record with no
+ *  department both have zero peers and are not the same situation.
+ *
+ *  Three states, the same three in all four solutions. */
+export type TeamState = "shown" | "too_small" | "unknown";
+
+/** Why no group could be identified. Only set alongside `unknown`, and deliberately
+ *  *not* a fourth `TeamState`: the panel behaves identically in all three cases —
+ *  two series and a sentence — and only the sentence differs. `no_directory_record`
+ *  is specific to this app, where the lookup covers agent creators and nobody else,
+ *  so there is nothing an administrator could populate to fix it. */
+export type TeamUnknownReason =
+  | "no_directory_record"
+  | "lookup_incomplete"
+  | "not_populated";
+
+export type OrganisationState = "shown" | "too_small";
+
+export interface PeerComparisonData {
+  period_from: string | null;
+  period_to: string | null;
+  /** Always present. A viewer below the floor keeps their own figures and loses
+   *  only the comparison — a blank panel would read as broken. */
+  mine: PeerSeries;
+  team: PeerSeries | null;
+  team_label: string | null;
+  team_size: number;
+  /** Returned even when the team is withheld: the name of a group is not the
+   *  disclosure, the figure is. */
+  team_state: TeamState;
+  team_unknown_reason: TeamUnknownReason | null;
+  /** The disclosure floor, owned and enforced by the server, so the copy on
+   *  screen cannot drift away from the rule actually applied. */
+  min_team_peers: number;
+  /** Null when withheld: the same disclosure floor applies to this series, since
+   *  the arithmetic does not care whether a group is called a team or a tenant. */
+  organisation: PeerSeries | null;
+  organisation_state: OrganisationState;
+  /** How many *other agent creators* there are — not the size of the tenant. */
+  organisation_size: number;
+  percentile: { agents: number | null; avg_score: number | null };
+}
+
+/** One scan's worth of quality: the average, and the spread behind it. */
+export interface QualityPoint {
+  scan_id: number;
+  captured_at: string | null;
+  agents: number;
+  avg_score: number;
+  min_score: number;
+  max_score: number;
+}
+
+export interface Mover {
+  bot_id: string;
+  agent_name: string;
+  from_score: number;
+  to_score: number;
+  delta: number;
+  direction: "up" | "down";
+  from_grade: string;
+  to_grade: string;
+  captured_at: string | null;
+}
+
+export interface QualityTimeline {
+  points: QualityPoint[];
+  from_at: string | null;
+  to_at: string | null;
+  movers: Mover[];
+}
+
+export interface TimelineFilters {
+  environments: { id: number; label: string }[];
+  creators: { upn: string; label: string; department: string | null; agents: number }[];
+  agents: { bot_id: string; label: string }[];
+}
+
+/** One row of the run log — a scan, or a directory sync. */
+export interface RunLogRow {
+  id: string;
+  scan_id: number | null;
+  kind: string;
+  raw_kind: string;
+  environment: string | null;
+  state: string;
+  raw_status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_seconds: number | null;
+  agents_found: number | null;
+  agents_scored: number | null;
+  partial: boolean;
+  score: number | null;
+  grade: string | null;
+  engine_version: string | null;
+  error: string | null;
+  wrote: Record<string, unknown>;
+}
+
+export interface CreatorDirectoryStatus {
+  creators_on_agents: number;
+  known: number;
+  resolved: number;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  last_run_error: string | null;
 }

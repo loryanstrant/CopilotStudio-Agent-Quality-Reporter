@@ -1,0 +1,388 @@
+"""You, your team and your organisation — and why a team is not shown.
+
+The disclosure rule is the reason most of this file exists: a team average drawn
+from a small group, next to the viewer's own figure, gives away an individual's
+number. So the interesting assertions are about what is *not* returned.
+
+The rest is about saying why, rather than guessing. ``team_state`` is stated by
+the endpoint — ``shown`` / ``too_small`` / ``unknown`` — because a department of
+one and a record with no department both yield zero peers, and telling somebody
+whose department is on file that we don't know their team is false about their own
+data. ``team_unknown_reason`` then separates the three ways nothing could be
+identified, including the one specific to this app: a viewer who has never created
+an agent was never looked up, so no amount of Entra housekeeping will fill it in.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from api.metrics import MIN_TEAM_PEERS, peer_comparison
+from shared.db import SessionLocal
+from shared.models import Agent, AgentCreator, AgentScore, Environment, Scan
+
+ME = "me@contoso.com"
+DEPT = "Customer Operations"
+
+
+async def make_creator(
+    session,
+    upn: str,
+    *,
+    department: str | None = DEPT,
+    manager_id: str | None = "mgr-1",
+    resolved: bool = True,
+) -> None:
+    session.add(
+        AgentCreator(
+            upn=upn.lower(),
+            display_name=upn.split("@")[0].title(),
+            department=department,
+            manager_id=manager_id,
+            manager_name="Dana Whitfield",
+            resolved=resolved,
+        )
+    )
+
+
+async def make_agents(session, scan: Scan, upn: str, scores: list[int]) -> None:
+    """One agent per score, created by ``upn`` and scored in ``scan``."""
+    now = datetime.now(timezone.utc)
+    for i, score in enumerate(scores):
+        bot = f"{upn}-{i}"
+        session.add(
+            Agent(
+                bot_id=bot,
+                display_name=f"{upn} agent {i}",
+                created_by_upn=upn,
+                created_by_name=upn.split("@")[0].title(),
+                created_on=now - timedelta(days=100),
+            )
+        )
+        session.add(
+            AgentScore(
+                scan_id=scan.id,
+                bot_id=bot,
+                agent_name=f"{upn} agent {i}",
+                score=score,
+                grade="C",
+                captured_at=now - timedelta(days=1),
+            )
+        )
+
+
+async def build(peers: int, *, me_agents: list[int] | None = None, **me_directory):
+    """A tenant with ``peers`` colleagues in the viewer's department."""
+    async with SessionLocal() as session:
+        env = Environment(display_name="Contoso")
+        session.add(env)
+        await session.flush()
+        scan = Scan(environment_id=env.id, source="demo", status="complete")
+        session.add(scan)
+        await session.flush()
+
+        if me_agents is not None:
+            await make_creator(session, ME, **me_directory)
+            await make_agents(session, scan, ME, me_agents)
+        for i in range(peers):
+            upn = f"peer{i}@contoso.com"
+            await make_creator(session, upn)
+            await make_agents(session, scan, upn, [50, 70])
+        # Somebody in another department, under another manager, so
+        # "organisation" is wider than "team" under either grouping.
+        await make_creator(
+            session, "outsider@contoso.com", department="Finance", manager_id="mgr-2"
+        )
+        await make_agents(session, scan, "outsider@contoso.com", [20])
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_three_series_when_the_team_is_big_enough():
+    await build(MIN_TEAM_PEERS, me_agents=[80, 90])
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+
+    assert result["mine"] == {"agents": 2, "avg_score": 85}
+    assert result["team"]["agents"] == 2
+    assert result["team"]["avg_score"] == 60
+    assert result["team_label"] == DEPT
+    assert result["team_state"] == "shown"
+    assert result["team_unknown_reason"] is None
+    # The floor travels with the answer so the copy carries no literal five.
+    assert result["min_team_peers"] == MIN_TEAM_PEERS
+    # The organisation is everyone else, including the other department.
+    assert result["organisation_size"] == MIN_TEAM_PEERS + 1
+
+
+@pytest.mark.asyncio
+async def test_a_team_one_person_short_is_withheld():
+    """Four peers is four, whatever the page would look like with a third bar."""
+    await build(MIN_TEAM_PEERS - 1, me_agents=[80])
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+
+    assert result["team"] is None
+    assert result["team_state"] == "too_small"
+    assert result["team_size"] == MIN_TEAM_PEERS - 1
+    # The label survives the withholding: naming a team discloses nothing, the
+    # figure would. Without it the sentence cannot say *which* team is small.
+    assert result["team_label"] == DEPT
+
+
+@pytest.mark.asyncio
+async def test_a_department_of_one_reports_too_small_not_unknown():
+    """The bug this shape exists to prevent.
+
+    A department of one and a record with no department both produce zero peers.
+    Deciding between them by counting peers tells somebody whose department is on
+    file that we do not know their team — false about their own data, and it sends
+    an administrator to fix something that is not broken.
+    """
+    await build(0, me_agents=[80])
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+
+    assert result["team"] is None
+    assert result["team_size"] == 0
+    assert result["team_state"] == "too_small"
+    assert result["team_label"] == DEPT
+    assert result["team_unknown_reason"] is None
+    assert result["mine"]["agents"] == 1
+    # One other creator in the whole tenant, so the organisation series is
+    # withheld under the same floor — the viewer keeps their own figures.
+    assert result["organisation"] is None
+    assert result["organisation_state"] == "too_small"
+
+
+@pytest.mark.asyncio
+async def test_the_manager_fallback_does_not_relax_the_threshold():
+    """A department of one becoming a manager group of two is still two."""
+    async with SessionLocal() as session:
+        env = Environment(display_name="Contoso")
+        session.add(env)
+        await session.flush()
+        scan = Scan(environment_id=env.id, source="demo", status="complete")
+        session.add(scan)
+        await session.flush()
+        await make_creator(session, ME, department=None, manager_id="mgr-9")
+        await make_agents(session, scan, ME, [70])
+        for i in range(2):
+            upn = f"sibling{i}@contoso.com"
+            await make_creator(session, upn, department=None, manager_id="mgr-9")
+            await make_agents(session, scan, upn, [40])
+        await session.commit()
+
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+    assert result["team"] is None
+    assert result["team_size"] == 2
+    assert result["team_state"] == "too_small"
+
+
+@pytest.mark.asyncio
+async def test_someone_who_has_never_created_an_agent_is_told_why():
+    """The lookup is scoped to creators, so a viewer with no agents has no team.
+
+    This must not read as "your directory record is incomplete" — it is a
+    consequence of not syncing the whole tenant, which was the point.
+    """
+    await build(MIN_TEAM_PEERS)
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn="newcomer@contoso.com")
+
+    assert result["mine"] == {"agents": 0, "avg_score": None}
+    assert result["team"] is None
+    assert result["team_state"] == "unknown"
+    # Not a fourth state: the panel does the same thing (two series and a
+    # sentence). Only the sentence differs, and it must offer no remedy, because
+    # there is nothing an administrator could populate to change this.
+    assert result["team_unknown_reason"] == "no_directory_record"
+    assert result["organisation"]["avg_score"] is not None
+
+
+@pytest.mark.asyncio
+async def test_an_unresolved_creator_is_distinguished_from_an_unknown_team():
+    await build(MIN_TEAM_PEERS, me_agents=[80], resolved=False)
+    async with SessionLocal() as session:
+        unresolved = await peer_comparison(session, upn=ME)
+    assert unresolved["team_state"] == "unknown"
+    assert unresolved["team_unknown_reason"] == "lookup_incomplete"
+
+    async with SessionLocal() as session:
+        row = await session.get(AgentCreator, ME)
+        row.resolved = True
+        row.department = None
+        row.manager_id = None
+        await session.commit()
+    async with SessionLocal() as session:
+        unknown = await peer_comparison(session, upn=ME)
+    assert unknown["team_state"] == "unknown"
+    # The only one of the three an administrator can fix in Entra.
+    assert unknown["team_unknown_reason"] == "not_populated"
+
+
+@pytest.mark.asyncio
+async def test_a_blank_department_does_not_become_one_enormous_team():
+    """Nobody is anybody's colleague by both having no department."""
+    async with SessionLocal() as session:
+        env = Environment(display_name="Contoso")
+        session.add(env)
+        await session.flush()
+        scan = Scan(environment_id=env.id, source="demo", status="complete")
+        session.add(scan)
+        await session.flush()
+        await make_creator(session, ME, department="  ", manager_id=None)
+        await make_agents(session, scan, ME, [70])
+        for i in range(MIN_TEAM_PEERS + 2):
+            upn = f"nodept{i}@contoso.com"
+            await make_creator(session, upn, department=None, manager_id=None)
+            await make_agents(session, scan, upn, [40])
+        await session.commit()
+
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+    assert result["team"] is None
+    assert result["team_state"] == "unknown"
+    assert result["team_unknown_reason"] == "not_populated"
+
+
+@pytest.mark.asyncio
+async def test_percentile_and_period_are_stated():
+    await build(MIN_TEAM_PEERS, me_agents=[95, 95])
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+
+    # Measured against the organisation — a team of six makes a team-relative
+    # percentile arithmetic rather than information.
+    assert result["percentile"]["avg_score"] == 100
+    assert result["percentile"]["agents"] == 100
+    assert result["period_from"] and result["period_to"], "the panel names the period"
+
+
+@pytest.mark.asyncio
+async def test_an_unscored_creator_does_not_average_as_zero():
+    """No score is not a score of nought, in either direction."""
+    await build(MIN_TEAM_PEERS, me_agents=[])
+    async with SessionLocal() as session:
+        # A creator with an agent that has never been scored.
+        session.add(
+            Agent(bot_id="never-scored", display_name="New", created_by_upn=ME)
+        )
+        await session.commit()
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+
+    assert result["mine"]["avg_score"] is None
+    assert result["percentile"]["avg_score"] is None
+    assert result["team"]["avg_score"] == 60
+
+
+@pytest.mark.asyncio
+async def test_the_three_unknown_reasons_are_told_apart_end_to_end():
+    """All three "nothing identified" cases, side by side.
+
+    They are one state because the panel does one thing in all three — two series
+    and a sentence. They carry different reasons because the sentences differ, and
+    only one of them has a remedy an administrator can act on.
+    """
+    await build(MIN_TEAM_PEERS, me_agents=[80], department=None, manager_id=None)
+    async with SessionLocal() as session:
+        blank = await peer_comparison(session, upn=ME)
+    assert (blank["team_state"], blank["team_unknown_reason"]) == (
+        "unknown",
+        "not_populated",
+    )
+
+    async with SessionLocal() as session:
+        row = await session.get(AgentCreator, ME)
+        row.resolved = False
+        await session.commit()
+    async with SessionLocal() as session:
+        pending = await peer_comparison(session, upn=ME)
+    assert (pending["team_state"], pending["team_unknown_reason"]) == (
+        "unknown",
+        "lookup_incomplete",
+    )
+
+    async with SessionLocal() as session:
+        nobody = await peer_comparison(session, upn="never.built.one@contoso.com")
+    assert (nobody["team_state"], nobody["team_unknown_reason"]) == (
+        "unknown",
+        "no_directory_record",
+    )
+    # And in every case the wider series is still drawn: the comparison is
+    # degraded, not absent.
+    for result in (blank, pending, nobody):
+        assert result["organisation_state"] == "shown"
+        assert result["organisation"]["avg_score"] is not None
+        assert result["team"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_manager_group_is_identified_even_when_it_is_empty():
+    """Identified is not the same as populated.
+
+    A manager on file with no other creators under them is a known group of one,
+    not an unknown group — so it is withheld as too_small, and the sentence names
+    the manager's team rather than claiming ignorance.
+    """
+    await build(0, me_agents=[70], department=None, manager_id="mgr-solo")
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+
+    assert result["team_state"] == "too_small"
+    assert result["team_size"] == 0
+    assert result["team_label"] == "Dana Whitfield's team"
+    assert result["team_unknown_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_the_organisation_series_is_withheld_below_the_same_floor():
+    """A mean identifies somebody whatever the group is called.
+
+    This matters more here than in the sibling solutions: their comparison
+    population is everyone with a Copilot licence, while this one is people who
+    have created an agent *and* resolved through the directory. A large tenant
+    with four people building agents lands below this floor, so the withholding is
+    routine rather than exceptional — and the copy must count creators rather than
+    calling the organisation small.
+    """
+    # Three other creators in total: two peers plus the outsider.
+    await build(2, me_agents=[80])
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+
+    assert result["organisation_size"] == 3
+    assert result["organisation_state"] == "too_small"
+    assert result["organisation"] is None
+    # A rank over three people is the same disclosure by another route.
+    assert result["percentile"] == {"agents": None, "avg_score": None}
+    # The viewer keeps their own figures: a blank panel reads as broken.
+    assert result["mine"] == {"agents": 1, "avg_score": 80}
+
+
+@pytest.mark.asyncio
+async def test_the_organisation_series_returns_at_the_floor():
+    await build(MIN_TEAM_PEERS, me_agents=[80])
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=ME)
+
+    assert result["organisation_size"] == MIN_TEAM_PEERS + 1
+    assert result["organisation_state"] == "shown"
+    assert result["organisation"]["avg_score"] is not None
+    assert result["percentile"]["agents"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_viewer_with_no_agents_in_a_tiny_tenant_still_sees_themselves():
+    """Both series withheld, and the panel is still not blank."""
+    await build(1)
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn="newcomer@contoso.com")
+
+    assert result["organisation_state"] == "too_small"
+    assert result["team_state"] == "unknown"
+    assert result["mine"] == {"agents": 0, "avg_score": None}
+    assert result["min_team_peers"] == MIN_TEAM_PEERS

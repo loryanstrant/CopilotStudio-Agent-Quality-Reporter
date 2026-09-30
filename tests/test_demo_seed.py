@@ -203,3 +203,72 @@ async def test_a_local_admin_without_a_persona_has_no_personal_view(client):
     me = (await client.get("/auth/me", headers=headers)).json()
     assert me["has_personal_view"] is False
     assert me["upn"] is None
+
+
+@pytest.mark.asyncio
+async def test_seeded_departments_are_big_enough_to_show_a_team():
+    """The comparison must actually appear on demo data, without relaxing the rule.
+
+    Random department assignment over a handful of makers produced departments
+    of three, so the team series was withheld and the feature the demo exists to
+    show never rendered. Round-robin over fourteen makers guarantees six peers
+    each. The threshold itself is never lowered — this asserts the population is
+    right, not that the rule was bent.
+    """
+    from api.metrics import MIN_TEAM_PEERS, peer_comparison
+
+    await seed(agents=40, reset=True)
+    async with SessionLocal() as session:
+        result = await peer_comparison(session, upn=_DEMO_ADMIN_MAKER[1])
+
+    assert result["team"] is not None, "demo data must exercise the team series"
+    assert result["team_size"] >= MIN_TEAM_PEERS
+    assert result["team_label"]
+    # Two departments, so the team average and the organisation average are
+    # different numbers — three identical bars reads as a bug.
+    assert result["team"] != result["organisation"]
+
+
+@pytest.mark.asyncio
+async def test_seeded_creators_carry_directory_details_including_one_unresolved():
+    """Demo data never calls Graph, so the rows the sync would write are seeded."""
+    from shared.models import AgentCreator
+
+    await seed(agents=40, reset=True)
+    async with SessionLocal() as session:
+        creators = (await session.execute(select(AgentCreator))).scalars().all()
+
+    assert len({c.department for c in creators if c.department} or {}) == 2
+    assert all(c.manager_name for c in creators if c.resolved)
+    unresolved = [c for c in creators if not c.resolved]
+    assert len(unresolved) == 1, "the kept-but-unresolvable creator must be visible"
+    assert unresolved[0].error
+
+
+@pytest.mark.asyncio
+async def test_the_run_log_is_seeded_with_a_failure_in_it():
+    """Scan history's failure rendering was untestable without breaking something."""
+    from api.metrics import scan_history
+
+    await seed(agents=40, reset=True)
+    async with SessionLocal() as session:
+        rows = await scan_history(session, limit=500)
+
+    directory_runs = [r for r in rows if r["kind"] == "Creator directory"]
+    assert len(directory_runs) == 14, "a fortnight of runs"
+    failed = [r for r in directory_runs if r["state"] == "failed"]
+    assert len(failed) == 1 and failed[0]["error"]
+    # A failed scan and a part-finished scan, both otherwise unreachable in a demo.
+    assert any(r["state"] == "failed" and r["scan_id"] for r in rows)
+    assert any(r["partial"] for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_clearing_demo_data_takes_the_directory_and_run_log_with_it():
+    from shared.models import AgentCreator, JobRun
+
+    await seed(agents=6, reset=True)
+    await clear()
+    async with SessionLocal() as session:
+        assert (await session.execute(select(AgentCreator))).scalars().all() == []
+        assert (await session.execute(select(JobRun))).scalars().all() == []

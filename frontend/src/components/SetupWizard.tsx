@@ -125,17 +125,32 @@ export default function SetupWizard({ defaultOpen = true }: { defaultOpen?: bool
               </p>
             </Step>
 
-            <Step n={3} title="(Optional) Add a Graph permission for report-group gating">
+            <Step n={3} title="(Optional) Add the Graph permissions">
               <p className="mb-2">
-                Only needed if you'll restrict the dashboard to an Entra security group. Under{" "}
+                Under{" "}
                 <span className="font-medium">
                   API permissions → Add a permission → Microsoft Graph → Application permissions
                 </span>
-                , add this and choose <span className="font-medium">Grant admin consent</span>:
+                , add either of these and choose{" "}
+                <span className="font-medium">Grant admin consent</span>. Both are optional and
+                each buys one thing.
               </p>
-              <div className="max-w-sm">
+              <div className="max-w-sm space-y-2">
                 <Chip value="Directory.Read.All" />
+                <Chip value="User.Read.All" />
               </div>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-500 dark:text-slate-400">
+                <li>
+                  <span className="font-mono">Directory.Read.All</span> — restricting sign-in, the
+                  organisation view or admin rights to a security group.
+                </li>
+                <li>
+                  <span className="font-mono">User.Read.All</span> — resolving agent creators to
+                  names, departments and managers, and comparing somebody with their team. Only
+                  the people already recorded as agent creators are looked up; the directory is
+                  never enumerated.
+                </li>
+              </ul>
             </Step>
 
             <Step n={4} title="Copy the IDs into the form below">
