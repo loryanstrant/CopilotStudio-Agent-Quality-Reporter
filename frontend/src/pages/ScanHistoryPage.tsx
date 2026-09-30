@@ -217,6 +217,10 @@ export default function ScanHistoryPage() {
           filterable
           maxBodyHeight="max(240px, calc(100vh - 17rem))"
           emptyMessage="Nothing has run yet. Open Settings and use Scan now, or wait for the next scheduled scan."
+          // Runs exist; this filter just matches none of them. Saying "nothing
+          // has run yet" here would send somebody to Settings to start a scan
+          // they have already run.
+          noMatchMessage="No run matches the filters above."
         />
       </ChartCard>
     </div>
