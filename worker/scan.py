@@ -213,8 +213,11 @@ async def run_scan(
     # opens its own, and nesting one inside the other would need two connections
     # from a pool that may only have one under SQLite.
     #
-    # It never raises — a scan that scored every agent has succeeded whatever
-    # Graph did, and the reason is recorded on its own job run.
+    # Reached only on a scan that completed — a failed scan re-raises above, and
+    # chasing the directory after a scan that could not read Dataverse would add
+    # a second failure to a run that already has one. It never raises itself: a
+    # scan that scored every agent has succeeded whatever Graph did, and the
+    # reason is recorded on its own job run either way.
     await sync_creators_quietly(session_factory)
     return result
 

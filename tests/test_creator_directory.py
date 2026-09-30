@@ -24,7 +24,13 @@ from worker.creators import (
     pending_upns,
     sync_creators,
 )
-from worker.graph import GraphConsentError, GraphNotFound, GraphUserLookup
+from worker.graph import (
+    GraphAuthError,
+    GraphConsentError,
+    GraphError,
+    GraphNotFound,
+    GraphUserLookup,
+)
 
 RESOLVED = "ava@contoso.com"
 LEAVER = "gone@contoso.com"
@@ -248,3 +254,107 @@ async def test_the_client_can_only_ever_request_one_named_user():
 
 async def _token() -> str:
     return "fake-token"
+
+
+class BrokenCredentials(FakeLookup):
+    """Every lookup fails to get a token — a rotated or expired client secret."""
+
+    async def get_user(self, upn: str) -> dict:
+        self.asked.append(upn)
+        raise GraphAuthError("token failed: invalid client secret")
+
+
+@pytest.mark.asyncio
+async def test_expired_credentials_do_not_unresolve_the_whole_tenant():
+    """One bad secret must not take every team comparison away.
+
+    A creator whose row reads unresolved gets no team series, so marking the
+    whole population unresolved over a credential problem would silently blank
+    the comparison for everybody — and it would do it again on every scan,
+    because unresolved rows are retried. Like a missing consent, this stops the
+    run and marks nobody.
+    """
+    await seed_agents([RESOLVED, LEAVER])
+    async with SessionLocal() as session:
+        session.add(
+            AgentCreator(
+                upn=RESOLVED,
+                display_name="Ava",
+                department="Customer Operations",
+                manager_id="mgr-1",
+                resolved=True,
+                updated_at=datetime.now(timezone.utc) - timedelta(days=30),
+            )
+        )
+        await session.commit()
+
+    lookup = BrokenCredentials(directory={})
+    stats = await sync_creators(SessionLocal, lookup_factory=lambda: lookup)
+
+    assert len(lookup.asked) == 1, "should stop on the first credential failure"
+    assert "token failed" in stats["error"]
+
+    async with SessionLocal() as session:
+        row = await session.get(AgentCreator, RESOLVED)
+        run = await session.scalar(
+            select(JobRun).order_by(JobRun.started_at.desc()).limit(1)
+        )
+    assert row.resolved is True, "a working directory row must survive a bad secret"
+    assert row.department == "Customer Operations"
+    assert run.status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_a_transient_error_keeps_the_details_it_already_had():
+    """A throttle that outlives its retries is not proof somebody left."""
+
+    class Throttled(FakeLookup):
+        async def get_user(self, upn: str) -> dict:
+            self.asked.append(upn)
+            raise GraphError("Graph 429 after retries")
+
+    await seed_agents([RESOLVED])
+    async with SessionLocal() as session:
+        session.add(
+            AgentCreator(
+                upn=RESOLVED,
+                display_name="Ava",
+                department="Customer Operations",
+                resolved=True,
+                updated_at=datetime.now(timezone.utc) - timedelta(days=30),
+            )
+        )
+        await session.commit()
+
+    await sync_creators(SessionLocal, lookup_factory=lambda: Throttled(directory={}))
+
+    async with SessionLocal() as session:
+        row = await session.get(AgentCreator, RESOLVED)
+    assert row.resolved is True
+    assert row.department == "Customer Operations"
+    assert "429" in row.error, "the failure is still recorded"
+
+
+@pytest.mark.asyncio
+async def test_a_creator_graph_says_is_gone_is_downgraded():
+    """A 404 is Graph answering, so an existing row does become unresolved."""
+    await seed_agents([RESOLVED])
+    async with SessionLocal() as session:
+        session.add(
+            AgentCreator(
+                upn=RESOLVED,
+                display_name="Ava",
+                resolved=True,
+                updated_at=datetime.now(timezone.utc) - timedelta(days=30),
+            )
+        )
+        await session.commit()
+
+    await sync_creators(SessionLocal, lookup_factory=lambda: FakeLookup(directory={}))
+
+    async with SessionLocal() as session:
+        row = await session.get(AgentCreator, RESOLVED)
+    assert row.resolved is False
+    # The name is kept, so the listing still reads as a person rather than
+    # regressing to a bare address the moment they leave.
+    assert row.display_name == "Ava"

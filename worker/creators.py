@@ -13,11 +13,14 @@ Three behaviours worth knowing before reading the code:
   by UPN. Dropping them would remove their agents from the creators listing, and
   a listing that is missing rows for a reason the reader cannot see is worse
   than one with an ugly-looking name in it.
-* **Missing consent stops the run, not the scan.** Without ``User.Read.All``
-  every lookup would return the same 403, so the first one ends the sync and the
-  reason is recorded on the job run for Settings and Scan history to show. A
-  scan that scored every agent correctly is not a failed scan because the
-  directory is unavailable.
+* **A tenant-wide failure stops the run, not the scan, and marks nobody.**
+  Without ``User.Read.All`` every lookup returns the same 403, and with a rotated
+  client secret every one fails to get a token — so the first such error ends the
+  sync and the reason is recorded on the job run for Settings and Scan history to
+  show. Nobody is written as unresolved, because an unresolved viewer gets no team
+  comparison: walking the whole list would turn one expired secret into a tenant
+  losing every comparison it had. A scan that scored every agent correctly is not
+  a failed scan because the directory was unavailable.
 * **Freshness, not idempotence, decides who is looked up.** Anything resolved
   within :data:`FRESH_FOR` is skipped, so a nightly scan of a stable tenant
   makes no Graph calls at all.
@@ -34,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from shared.crypto import decrypt
 from shared.models import Agent, AgentCreator, AppConfig, JobRun
 from worker.graph import (
+    GraphAuthError,
     GraphConsentError,
     GraphError,
     GraphNotFound,
@@ -156,17 +160,33 @@ async def sync_creators(
                 for upn in upns:
                     try:
                         details = await graph.get_user(upn)
-                    except GraphConsentError as exc:
+                    except (GraphConsentError, GraphAuthError) as exc:
+                        # Tenant-wide failures: a missing consent, or credentials
+                        # that no longer work. Both would return the same answer
+                        # for every remaining person, so the run stops on the
+                        # first one and records the reason once — and critically,
+                        # **nobody is marked unresolved**. Walking on would flip
+                        # every creator in the tenant to "not resolved" over a
+                        # rotated client secret, and since an unresolved viewer
+                        # gets no team comparison, one expired secret would
+                        # silently blank the comparison for everybody until
+                        # somebody read the run log.
                         consent_error = str(exc)
                         logger.warning("Creator sync stopped: %s", exc)
                         break
                     except GraphNotFound:
                         await _store_unresolved(
-                            session, upn, "No directory record for this sign-in address."
+                            session,
+                            upn,
+                            "No directory record for this sign-in address.",
+                            definitive=True,
                         )
                         unresolved += 1
                         continue
                     except GraphError as exc:
+                        # A failure for this one person — a throttle that outlived
+                        # its retries, a malformed UPN. Recorded, but it does not
+                        # discard directory details already held for them.
                         await _store_unresolved(session, upn, str(exc)[:300])
                         failed += 1
                         continue
@@ -219,13 +239,28 @@ async def _store_resolved(session: AsyncSession, upn: str, details: dict) -> Non
     row.updated_at = datetime.now(timezone.utc)
 
 
-async def _store_unresolved(session: AsyncSession, upn: str, error: str) -> None:
-    """Keep the creator, without directory details. See the module docstring."""
+async def _store_unresolved(
+    session: AsyncSession, upn: str, error: str, *, definitive: bool = False
+) -> None:
+    """Keep the creator, and record why the lookup did not answer.
+
+    ``definitive`` says whether Graph actually told us this person is not there
+    (a 404). Only then is an existing row downgraded to ``resolved=False``.
+
+    For anything else — a throttle, a transport error — details already held are
+    **kept**. A team comparison disappears the moment its viewer's row reads
+    unresolved, so treating a one-off error as proof that somebody left the
+    company would take a working comparison away over a network blip, and put it
+    back on the next sync. The error is still recorded, so the failure is
+    visible in Settings and the run log either way.
+    """
     row = await session.get(AgentCreator, upn)
     if row is None:
         row = AgentCreator(upn=upn)
         session.add(row)
-    row.resolved = False
+        row.resolved = False
+    elif definitive or not row.resolved:
+        row.resolved = False
     row.error = error
     row.updated_at = datetime.now(timezone.utc)
 
