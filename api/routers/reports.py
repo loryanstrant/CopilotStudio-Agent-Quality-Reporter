@@ -639,6 +639,27 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
     personal view can afford a per-agent lookup because it only ever walks one
     person's agents; this page walks every agent in the tenant, so the same
     pattern would have been two queries per agent across potentially hundreds.
+
+    **Why each creator's agents ship inline** (``agent_list``), even though the
+    page renders at most one creator's at a time. Measured, decided, and worth
+    revisiting if any of the three facts below stops being true:
+
+    * *Cost.* About 285 bytes of JSON per agent — ~15 KB for this tenant's 54,
+      ~139 KB at 500, ~557 KB at 2,000. Responses are not compressed: the app
+      installs no ``GZipMiddleware``, so those are what goes over the wire.
+    * *Precedent.* ``/reports/all-agents`` already returns every agent in the
+      tenant, uncompressed, every time anyone opens Overview — nine of the same
+      ten fields. So this is the size of a page this app already serves, not a
+      new class of response.
+    * *Benefit.* It is what makes clicking a name instant. Fetching on click
+      would mean a spinner on the one interaction the page exists for, and a
+      second org-gated route whose only job is to re-derive rows this query
+      already has in hand.
+
+    The honest ceiling is somewhere past a couple of thousand agents, and the
+    right fix at that point is **not** to move this behind the click — it is to
+    add response compression, which would take ~557 KB to well under a tenth of
+    that and would fix ``/reports/all-agents`` in the same stroke.
     """
     env_names = {
         e.id: e.display_name

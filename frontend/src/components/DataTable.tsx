@@ -50,9 +50,25 @@ interface Props<Row> {
   rows: Row[];
   getRowKey: (row: Row, index: number) => string | number;
   initialSort?: SortState;
+  /** Shown when the table has no rows at all. */
   emptyMessage?: string;
+  /** Shown when there are rows but a filter or selection excludes them all.
+   *
+   *  Separate from `emptyMessage` because they say different things: "nothing
+   *  has been recorded yet" is a fact about the data, and telling somebody that
+   *  when they have simply typed a name that does not match is a lie they will
+   *  act on. */
+  noMatchMessage?: string;
   rowClassName?: (row: Row) => string;
   onRowClick?: (row: Row) => void;
+  /** Rows this callback rejects are not clickable — no pointer cursor, no
+   *  hover highlight, and `onRowClick` is not called for them.
+   *
+   *  Only relevant alongside `onRowClick`. Use it where *some* rows have
+   *  nowhere to go: a row that lights up under the cursor and then does
+   *  nothing is an affordance that lies, and the reader concludes the table is
+   *  broken rather than that the row is different. */
+  isRowClickable?: (row: Row) => boolean;
   /** When set, the table body scrolls within this height and the header sticks
    * to the top — keeps long tables from pushing the page scrollbar away.
    *
@@ -75,6 +91,15 @@ interface Props<Row> {
    *  own state, which is what every other caller wants. */
   filters?: Record<string, string>;
   onFiltersChange?: (filters: Record<string, string>) => void;
+  /** Narrow the table to the single row with this key, on top of any filters.
+   *
+   *  Distinct from a filter term on purpose. Filter terms are substrings,
+   *  because that is what a person typing into a box wants; a selection made
+   *  by *clicking a row* has to be exact, or `amy@contoso.com` selects
+   *  `tamy@contoso.com` along with her. A key is the one value a table already
+   *  guarantees is unique per row, so selection is identity rather than a
+   *  guess about how many rows a substring happened to leave. */
+  selectedKey?: string | number | null;
 }
 
 function isEmpty(v: string | number | null | undefined): boolean {
@@ -111,6 +136,22 @@ function defaultDir<Row>(col: Column<Row>): SortDir {
  *  Case-insensitive substring per column, ANDed across columns — the same
  *  behaviour people expect from a spreadsheet filter.
  */
+/** Narrow rows to the one whose key matches, or pass them all through.
+ *
+ *  Paired with `applyFilters`: together they are exactly what the table
+ *  displays. Exported for the same reason — a page that has to agree with the
+ *  table about which rows are on screen must use the table's own rule, not a
+ *  second copy of it.
+ */
+export function applySelection<Row>(
+  rows: Row[],
+  getRowKey: (row: Row, index: number) => string | number,
+  selectedKey: string | number | null | undefined,
+): Row[] {
+  if (selectedKey == null) return rows;
+  return rows.filter((row, i) => getRowKey(row, i) === selectedKey);
+}
+
 export function applyFilters<Row>(
   rows: Row[],
   columns: Column<Row>[],
@@ -139,12 +180,15 @@ export default function DataTable<Row>({
   getRowKey,
   initialSort,
   emptyMessage = "No data yet.",
+  noMatchMessage = "Nothing matches the filters above.",
   rowClassName,
   onRowClick,
   maxBodyHeight,
   filterable = false,
   filters: filtersProp,
   onFiltersChange,
+  selectedKey,
+  isRowClickable,
 }: Props<Row>) {
   const [sort, setSort] = useState<SortState | null>(initialSort ?? null);
   const [ownFilters, setOwnFilters] = useState<Record<string, string>>({});
@@ -156,8 +200,13 @@ export default function DataTable<Row>({
   };
 
   const filteredRows = useMemo(
-    () => (filterable ? applyFilters(rows, columns, filters) : rows),
-    [rows, columns, filters, filterable],
+    () =>
+      applySelection(
+        filterable ? applyFilters(rows, columns, filters) : rows,
+        getRowKey,
+        selectedKey,
+      ),
+    [rows, columns, filters, filterable, getRowKey, selectedKey],
   );
 
   const sortedRows = useMemo(() => {
@@ -268,16 +317,18 @@ export default function DataTable<Row>({
                 colSpan={columns.length}
                 className="px-5 py-6 text-center text-slate-400"
               >
-                {emptyMessage}
+                {rows.length === 0 ? emptyMessage : noMatchMessage}
               </td>
             </tr>
           ) : (
-            sortedRows.map((row, i) => (
+            sortedRows.map((row, i) => {
+              const clickable = !!onRowClick && (isRowClickable?.(row) ?? true);
+              return (
               <tr
                 key={getRowKey(row, i)}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onClick={clickable ? () => onRowClick!(row) : undefined}
                 className={`border-t border-slate-100 dark:border-slate-700 ${
-                  onRowClick
+                  clickable
                     ? "cursor-pointer hover:bg-slate-100/60 dark:hover:bg-slate-700/50"
                     : ""
                 } ${rowClassName?.(row) ?? ""}`}
@@ -300,7 +351,8 @@ export default function DataTable<Row>({
                   );
                 })}
               </tr>
-            ))
+              );
+            })
           )}
         </tbody>
       </table>

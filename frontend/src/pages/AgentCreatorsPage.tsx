@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { AgentCreator, CreatorAgent } from "../api/types";
-import DataTable, { applyFilters, type Column } from "../components/DataTable";
+import DataTable, {
+  applyFilters,
+  applySelection,
+  type Column,
+} from "../components/DataTable";
 import KpiCard from "../components/KpiCard";
 import PageHeader from "../components/PageHeader";
 import { gradeColor, gradeForScore } from "../components/chartTheme";
@@ -20,10 +24,16 @@ import { gradeColor, gradeForScore } from "../components/chartTheme";
  * Picking a creator filters this page rather than opening a page of their own.
  * That was a deliberate choice over a per-creator route: the question is "and
  * what are theirs, then?", asked while reading the table, and answering it
- * without leaving the table keeps the comparison in view. It is also why the
- * selection is *nothing more than* the table's own Creator filter with a value
- * in it — there is one filtering mechanism on this page, and a click is a
- * shortcut into it rather than a second one beside it.
+ * without leaving the table keeps the comparison in view.
+ *
+ * The page narrows two ways and they are deliberately different mechanisms,
+ * because they are asked differently. Typing into a filter box is a
+ * **substring** search, which is what anybody expects from a filter box.
+ * Clicking a name is an **exact** selection by row key, because a substring
+ * cannot express "this person and not the other one": `amy@contoso.com` is
+ * inside `tamy@contoso.com`, so clicking Amy that way would leave two rows,
+ * and the agents panel — the whole point of the click — would silently never
+ * open. Typing afterwards takes over from a click; the two never compound.
  */
 
 const GRADES = ["A", "B", "C", "D", "F"];
@@ -34,6 +44,11 @@ const C_FLOOR = 60;
 /** The column the row click writes into. Named once: the click, the "clear"
  *  button and the filter box all have to agree about it. */
 const CREATOR_COLUMN = "name";
+
+/** Row identity for the creators table. The stored UPN, which the endpoint
+ *  groups on case-insensitively, so it is one row per person. Shared between
+ *  `getRowKey` and the selection so they cannot mean different things. */
+const rowKey = (r: AgentCreator) => r.upn;
 
 function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -100,6 +115,13 @@ export default function AgentCreatorsPage() {
   // the failure this avoids.
   const [filters, setFilters] = useState<Record<string, string>>({});
 
+  // Who was clicked, by the key the table already guarantees is unique — the
+  // stored UPN. Deliberately NOT a filter term: filter terms are substrings,
+  // so selecting `amy@contoso.com` that way would take `tamy@contoso.com` with
+  // her, leave two rows, and the agents panel would silently never open. Short
+  // local parts are ordinary, so that is a bug a real tenant reaches.
+  const [selectedUpn, setSelectedUpn] = useState<string | null>(null);
+
   useEffect(() => {
     api
       .get<AgentCreator[]>("/reports/agent-creators")
@@ -108,12 +130,25 @@ export default function AgentCreatorsPage() {
       .finally(() => setLoaded(true));
   }, []);
 
-  /** Narrow the page to one person: write their stored UPN into the Creator
-   *  filter and drop any other filter, so a click always lands on exactly the
-   *  person clicked rather than on the intersection of them and whatever was
-   *  already typed. */
+  /** Narrow the page to exactly the person clicked. Any typed filter is
+   *  dropped at the same time, so a click lands on them rather than on the
+   *  intersection of them and whatever was already in a box. */
   function selectCreator(r: AgentCreator) {
-    setFilters({ [CREATOR_COLUMN]: r.upn });
+    setFilters({});
+    setSelectedUpn(r.upn);
+  }
+
+  function clearSelection() {
+    setFilters({});
+    setSelectedUpn(null);
+  }
+
+  /** Typing takes over from a click. Otherwise a selection the boxes cannot
+   *  show would keep narrowing the table underneath whatever is typed, and the
+   *  filter row would appear not to work. */
+  function changeFilters(next: Record<string, string>) {
+    setFilters(next);
+    setSelectedUpn(null);
   }
 
   const columns: Column<AgentCreator>[] = useMemo(
@@ -124,9 +159,8 @@ export default function AgentCreatorsPage() {
         // Name over sign-in name in one column, the way the sidebar shows a
         // person. Two columns needed 1010px of table in a 974px space at a
         // 1280px window, which put Environments behind a horizontal scrollbar
-        // on a very ordinary laptop. The filter still matches either, because
-        // the accessor carries both — and it carries the *stored* UPN, so that
-        // a row click can write an exact value into the box.
+        // on a very ordinary laptop. Typing in the filter box still matches
+        // either, because the accessor carries both.
         accessor: (r) => `${r.display_name ?? ""} ${r.upn}`.trim(),
         render: (r) => (
           <div className="min-w-0">
@@ -230,21 +264,23 @@ export default function AgentCreatorsPage() {
     [],
   );
 
+  // Exactly what the table shows: the same two rules, in the same order, from
+  // the same module — so the tiles and the agents panel cannot disagree with
+  // the list between them.
   const visibleRows = useMemo(
-    () => applyFilters(rows, columns, filters),
-    [rows, columns, filters],
+    () =>
+      applySelection(applyFilters(rows, columns, filters), rowKey, selectedUpn),
+    [rows, columns, filters, selectedUpn],
   );
 
   const isFiltered = Object.values(filters).some((v) => v.trim());
-  // One creator on screen is the selected-creator state, however it was
-  // reached — a row click, or typing enough into any filter box to leave one
-  // person. Both are the same question, so both get the same answer.
-  //
-  // It takes a filter as well as a single row, because a tenant with exactly
-  // one recorded creator would otherwise open with their agents already
-  // spilled out below and no banner explaining it — a page that looks like
-  // somebody clicked something when nobody did.
-  const selected = isFiltered && visibleRows.length === 1 ? visibleRows[0] : null;
+  /** The page is showing less than the whole tenant, by either route. */
+  const isNarrowed = isFiltered || selectedUpn !== null;
+  // Selection is identity, never "how many rows a substring happened to
+  // leave". A UPN is unique per row, so this finds one person or nobody.
+  const selected = selectedUpn
+    ? (rows.find((r) => r.upn === selectedUpn) ?? null)
+    : null;
 
   const stats = useMemo(() => {
     const of = (subset: AgentCreator[]) => {
@@ -292,7 +328,7 @@ export default function AgentCreatorsPage() {
       {/* The filter is stated in words above everything it changes, and the way
           out of it is the button next to the words. A filter you cannot see is
           the reason a page looks broken; a filter you cannot leave is worse. */}
-      {isFiltered && (
+      {isNarrowed && (
         <div className="card flex flex-wrap items-center justify-between gap-3 border-l-4 border-brand-500 px-5 py-3">
           <p className="text-sm text-slate-700 dark:text-slate-200">
             <span aria-hidden>● </span>
@@ -301,6 +337,11 @@ export default function AgentCreatorsPage() {
                 Showing <strong>{selected.display_name || selected.upn_display}</strong>{" "}
                 only — {plural(selected.agents, "agent")}, listed below.
               </>
+            ) : shown.creators === 0 ? (
+              <>
+                No creator matches this filter — <strong>0</strong> of{" "}
+                {plural(all.creators, "creator")}.
+              </>
             ) : (
               <>
                 Filtered to <strong>{shown.creators}</strong> of{" "}
@@ -308,7 +349,7 @@ export default function AgentCreatorsPage() {
               </>
             )}
           </p>
-          <button type="button" className="btn-secondary text-sm" onClick={() => setFilters({})}>
+          <button type="button" className="btn-secondary text-sm" onClick={clearSelection}>
             Show all creators
           </button>
         </div>
@@ -319,7 +360,7 @@ export default function AgentCreatorsPage() {
           label="Creators"
           value={shown.creators}
           hint={
-            isFiltered
+            isNarrowed
               ? `of ${plural(all.creators, "creator")} in the tenant`
               : shown.departments > 0
                 ? `${plural(shown.departments, "department")}, ${plural(
@@ -333,7 +374,7 @@ export default function AgentCreatorsPage() {
           label="Agents attributed"
           value={shown.agents}
           hint={
-            isFiltered
+            isNarrowed
               ? `of ${all.agents} across every creator`
               : `${shown.perCreator} per creator on average`
           }
@@ -342,25 +383,32 @@ export default function AgentCreatorsPage() {
           label="Creators below a C average"
           value={shown.needHelp}
           hint={
-            // "0 · of 0 in the tenant" is a clumsy way to say nobody is
-            // struggling, so the tenant-wide hint only appears when there is a
-            // tenant-wide figure worth comparing against.
-            isFiltered && all.needHelp > 0
-              ? `of ${all.needHelp} in the tenant · under ${C_FLOOR} out of 100`
-              : shown.needHelp > 0
-                ? `Averaging under ${C_FLOOR} out of 100`
-                : "Everyone is at a C or better"
+            // The reassuring sentences are about the people on screen, so they
+            // must not be said about nobody: a filter matching no one used to
+            // answer "everyone is at a C or better", which reads as good news
+            // about an empty list. And "0 · of 0 in the tenant" is a clumsy way
+            // to say nobody is struggling, so the tenant-wide hint appears only
+            // when there is a tenant-wide figure worth comparing against.
+            shown.creators === 0
+              ? `No creator matches · ${plural(all.creators, "creator")} in the tenant`
+              : isNarrowed && all.needHelp > 0
+                ? `of ${all.needHelp} in the tenant · under ${C_FLOOR} out of 100`
+                : shown.needHelp > 0
+                  ? `Averaging under ${C_FLOOR} out of 100`
+                  : "Everyone shown is at a C or better"
           }
         />
         <KpiCard
           label="Open findings"
           value={shown.findings}
           hint={
-            isFiltered && all.findings > 0
-              ? `of ${all.findings} across every creator`
-              : shown.findings > 0
-                ? `On ${shown.withFindings} of ${plural(shown.creators, "creator")}`
-                : "Nothing outstanding"
+            shown.creators === 0
+              ? "No creator matches this filter"
+              : isNarrowed && all.findings > 0
+                ? `of ${all.findings} across every creator`
+                : shown.findings > 0
+                  ? `On ${shown.withFindings} of ${plural(shown.creators, "creator")}`
+                  : "Nothing outstanding"
           }
         />
       </div>
@@ -374,13 +422,15 @@ export default function AgentCreatorsPage() {
         <DataTable
           columns={columns}
           rows={rows}
-          getRowKey={(r) => r.upn}
+          getRowKey={rowKey}
           initialSort={{ key: CREATOR_COLUMN, dir: "asc" }}
           filterable
           filters={filters}
-          onFiltersChange={setFilters}
+          onFiltersChange={changeFilters}
+          selectedKey={selectedUpn}
           onRowClick={selectCreator}
           emptyMessage="No agents have a recorded creator yet."
+          noMatchMessage="No creator matches the filters above."
         />
       </div>
 
@@ -431,7 +481,16 @@ function CreatorAgents({
       header: "Solution",
       accessor: (a) => a.solution_name ?? "",
       render: (a) =>
-        a.solution_name ?? <span className="text-fail">default solution</span>,
+        a.solution_name ??
+        // "default solution" is a finding — an agent nobody put in a solution.
+        // It can only be said about an agent a scan has actually looked at. On
+        // one no scan has reached, the solution is simply not known yet, and
+        // flagging it red would be an accusation made up out of a null.
+        (a.scan_id == null ? (
+          <span className="text-slate-400">—</span>
+        ) : (
+          <span className="text-fail">default solution</span>
+        )),
     },
     {
       key: "state",
@@ -483,9 +542,12 @@ function CreatorAgents({
         rows={creator.agent_list}
         getRowKey={(a, i) => a.bot_id ?? `${a.agent_name}-${i}`}
         onRowClick={onOpen}
-        // Dimmed, because clicking it does nothing — there is no scan behind it
-        // to show. The "Not scored yet" in its Score cell is the words half of
-        // the same signal.
+        // An agent no scan has reached has no scorecard to open, so its row is
+        // not clickable at all — no pointer, no hover lift. Left clickable it
+        // would light up under the cursor and then do nothing, and a reader
+        // concludes the table is broken rather than that the row is different.
+        // Dimmed and captioned "Not scored yet" for the same reason.
+        isRowClickable={(a) => a.scan_id != null}
         rowClassName={(a) => (a.scan_id == null ? "opacity-60" : "")}
         emptyMessage="No agents recorded for this creator."
       />
