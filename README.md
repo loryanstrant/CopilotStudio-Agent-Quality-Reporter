@@ -95,6 +95,8 @@ Status is a shape plus a word (● Succeeded · ◐ In progress · ○ Failed), 
 
 This is deliberately **not** the History page above. Both read the scan table; this one answers "did it run", that one answers "is quality moving".
 
+![Scan history](docs/screenshots/scan-history.png)
+
 ![History](docs/screenshots/history.png)
 
 ### Setup guide
