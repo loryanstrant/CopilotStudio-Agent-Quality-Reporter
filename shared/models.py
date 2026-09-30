@@ -132,6 +132,50 @@ class Agent(Base):
     )
 
 
+class AgentCreator(Base):
+    """Directory details for one person who has created an agent.
+
+    This is **not** a tenant directory, and the distinction is the whole design.
+    Rows appear here only for UPNs already stamped on an agent by Copilot
+    Studio: the sync reads ``SELECT DISTINCT created_by_upn FROM agents`` and
+    looks up exactly those people. It never enumerates ``/users``, because
+    resolving people who have nothing to do with the data is the tenant-wide
+    sync this feature was deliberately scoped away from.
+
+    A creator Graph cannot resolve — someone who has left, a service principal,
+    a guest removed from the tenant — is **kept** with ``resolved=False`` and
+    shown by UPN. Dropping them would silently lose their agents from every
+    listing that joins through here.
+
+    Consequence worth knowing when reading the personal pages: somebody who has
+    never created an agent has no row here, so the app knows no department for
+    them and shows them no team comparison.
+    """
+
+    __tablename__ = "agent_creators"
+
+    # The UPN, lower-cased, because it is what agents carry and the only key
+    # both sides of the join always have. The Entra object id is stored when
+    # Graph answers, but cannot be the key: unresolved creators have none.
+    upn: Mapped[str] = mapped_column(Text, primary_key=True)
+    entra_user_id: Mapped[str | None] = mapped_column(Text)
+    display_name: Mapped[str | None] = mapped_column(Text)
+    department: Mapped[str | None] = mapped_column(Text, index=True)
+    job_title: Mapped[str | None] = mapped_column(Text)
+    office_location: Mapped[str | None] = mapped_column(Text)
+    manager_id: Mapped[str | None] = mapped_column(Text, index=True)
+    manager_name: Mapped[str | None] = mapped_column(Text)
+    # False when Graph could not resolve the UPN. The row still exists, so the
+    # person still appears in listings — see the class docstring.
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Why the lookup failed, for the one person it failed for. Tenant-wide
+    # failures (no consent, bad credentials) are recorded on the job run.
+    error: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class Scan(Base):
     """One quality scan run over an environment (or the bundled demo/zip source)."""
 

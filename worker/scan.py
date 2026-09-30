@@ -21,6 +21,7 @@ from engine.loader import ENGINE_VERSION, catalogue_hash, load_model_config, loa
 from engine.static_rules import apply_rule_configs, grade_for_score, run_static_rules
 from shared.crypto import decrypt
 from shared.rules_config import load_effective_configs
+from worker.creators import sync_creators_quietly
 from shared.models import (
     Agent,
     AgentScore,
@@ -204,8 +205,18 @@ async def run_scan(
 
         logger.info("Scan %s complete: rollup=%s agents=%s source=%s",
                     scan.id, scan.score, len(agents), source)
-        return {"scan_id": scan.id, "score": scan.score, "grade": scan.grade,
-                "agent_count": len(agents)}
+        result = {"scan_id": scan.id, "score": scan.score, "grade": scan.grade,
+                  "agent_count": len(agents)}
+
+    # Agents have just been upserted, so this is the moment the set of creator
+    # UPNs can have changed. Outside the session above deliberately: the sync
+    # opens its own, and nesting one inside the other would need two connections
+    # from a pool that may only have one under SQLite.
+    #
+    # It never raises — a scan that scored every agent has succeeded whatever
+    # Graph did, and the reason is recorded on its own job run.
+    await sync_creators_quietly(session_factory)
+    return result
 
 
 def _persist_judge(session, scan_id: int, label: str, verdict: dict | None) -> None:

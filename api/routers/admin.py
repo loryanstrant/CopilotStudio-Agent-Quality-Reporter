@@ -12,6 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api import metrics
 from api.auth import CurrentUser, require_admin
 from api.oidc import reset_app_cache, reset_group_cache
 from api.schemas import (
@@ -27,8 +28,18 @@ from api.schemas import (
 )
 from shared.crypto import decrypt, encrypt
 from shared.db import SessionLocal, get_session
-from shared.models import Agent, AppConfig, Environment, RuleConfig, Scan
+from shared.models import (
+    Agent,
+    AgentCreator,
+    AppConfig,
+    Environment,
+    JobRun,
+    RuleConfig,
+    Scan,
+)
 from shared.rules_config import sync_rule_configs
+from worker.creators import JOB_NAME as CREATOR_JOB_NAME
+from worker.creators import CreatorSyncSkipped, sync_creators
 from worker.scan import ScanError, run_scan
 
 logger = logging.getLogger("api.admin")
@@ -347,7 +358,7 @@ async def status(session: AsyncSession = Depends(get_session)) -> StatusOut:
 
 
 @router.post("/seed-demo", response_model=ScanRunOut)
-async def seed_demo(agents: int = 18, reset: bool = True) -> ScanRunOut:
+async def seed_demo(agents: int = 40, reset: bool = True) -> ScanRunOut:
     """Seed synthetic agent-quality data so the dashboards render without Dataverse.
 
     Explicit action only — nothing is ever seeded automatically on deploy.
@@ -380,3 +391,80 @@ async def clear_demo() -> ScanRunOut:
         status="cleared",
         detail="Demo data removed. Run now to scan your real environments.",
     )
+
+@router.get("/scan-history")
+async def scan_history(
+    limit: int = 200, session: AsyncSession = Depends(get_session)
+) -> list[dict]:
+    """The run log: every scan, and every directory sync, newest first.
+
+    Distinct from the History page, which is the quality trend. This answers
+    "did it run, and what did it write"; that one answers "is quality moving".
+    """
+    return await metrics.scan_history(session, limit=max(1, min(limit, 500)))
+
+
+@router.get("/creator-directory")
+async def creator_directory_status(
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Whether creators have been resolved against the directory, and how it went.
+
+    Surfaced in Settings because the usual failure is a missing consent, and a
+    tenant administrator cannot be expected to guess that from names quietly
+    staying as email addresses.
+    """
+    total = await session.scalar(select(func.count()).select_from(AgentCreator)) or 0
+    resolved = (
+        await session.scalar(
+            select(func.count()).select_from(AgentCreator).where(AgentCreator.resolved)
+        )
+        or 0
+    )
+    creators_on_agents = (
+        await session.scalar(
+            select(func.count(func.distinct(func.lower(Agent.created_by_upn)))).where(
+                Agent.created_by_upn.isnot(None), Agent.created_by_upn != ""
+            )
+        )
+        or 0
+    )
+    last = await session.scalar(
+        select(JobRun)
+        .where(JobRun.job_name == CREATOR_JOB_NAME)
+        .order_by(JobRun.started_at.desc())
+        .limit(1)
+    )
+    stats = last.stats if (last and isinstance(last.stats, dict)) else {}
+    return {
+        "creators_on_agents": int(creators_on_agents),
+        "known": int(total),
+        "resolved": int(resolved),
+        "last_run_at": last.started_at.isoformat() if last and last.started_at else None,
+        "last_run_status": last.status if last else None,
+        "last_run_error": stats.get("error"),
+    }
+
+
+@router.post("/refresh-creator-directory", response_model=ScanRunOut)
+async def refresh_creator_directory(force: bool = False) -> ScanRunOut:
+    """Look up agent creators in the directory now.
+
+    Runs at the end of every scan as well; this is for the case where the
+    permission has just been consented and nobody wants to wait for tonight.
+    ``force`` ignores the seven-day freshness window.
+    """
+    try:
+        stats = await sync_creators(SessionLocal, force=force)
+    except CreatorSyncSkipped as exc:
+        return ScanRunOut(status="skipped", detail=str(exc))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Creator directory refresh failed: %s", exc)
+        raise HTTPException(status_code=502, detail=str(exc)[:300]) from exc
+    detail = (
+        f"Looked up {stats['creators']} creator(s): {stats['resolved']} resolved, "
+        f"{stats['unresolved']} not in the directory."
+    )
+    if stats.get("error"):
+        return ScanRunOut(status="failed", detail=stats["error"])
+    return ScanRunOut(status="ok", detail=detail)
