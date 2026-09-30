@@ -41,8 +41,9 @@ const GRADES = ["A", "B", "C", "D", "F"];
 /** 60 is the C floor in engine/static_rules.py. Below it is a real signal. */
 const C_FLOOR = 60;
 
-/** The column the row click writes into. Named once: the click, the "clear"
- *  button and the filter box all have to agree about it. */
+/** The Creator column's key. Named once because the column, the initial sort
+ *  and the filter box all have to agree about it. The row *click* no longer
+ *  goes through it — that is a selection by row key, not a filter term. */
 const CREATOR_COLUMN = "name";
 
 /** Row identity for the creators table. The stored UPN, which the endpoint
@@ -470,7 +471,31 @@ function CreatorAgents({
   onOpen: (agent: CreatorAgent) => void;
 }) {
   const columns: Column<CreatorAgent>[] = [
-    { key: "agent", header: "Agent", accessor: (a) => a.agent_name ?? "" },
+    {
+      key: "agent",
+      header: "Agent",
+      accessor: (a) => a.agent_name ?? "",
+      // A real button, matching the creator names in the table above: the row
+      // is clickable for the mouse, and this is how the same thing is reached
+      // from the keyboard. An agent no scan has looked at has no scorecard, so
+      // it stays plain text rather than a control that goes nowhere.
+      render: (a) =>
+        a.scan_id == null || !a.bot_id ? (
+          <span>{a.agent_name}</span>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen(a);
+            }}
+            title={`Open the scorecard for ${a.agent_name}`}
+            className="block max-w-full truncate rounded text-left hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          >
+            {a.agent_name}
+          </button>
+        ),
+    },
     {
       key: "environment",
       header: "Environment",

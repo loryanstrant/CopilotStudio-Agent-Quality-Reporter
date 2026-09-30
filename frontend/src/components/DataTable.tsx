@@ -126,16 +126,6 @@ function defaultDir<Row>(col: Column<Row>): SortDir {
   return (col.type ?? "text") === "text" ? "asc" : "desc";
 }
 
-/** Apply the filter row's terms to a set of rows.
- *
- *  Exported so a page driving the filters (see `filters` / `onFiltersChange`)
- *  can work out which rows are on screen without re-implementing the rule and
- *  drifting from it — a KPI tile that counts rows the table is not showing is
- *  the bug this exists to prevent.
- *
- *  Case-insensitive substring per column, ANDed across columns — the same
- *  behaviour people expect from a spreadsheet filter.
- */
 /** Narrow rows to the one whose key matches, or pass them all through.
  *
  *  Paired with `applyFilters`: together they are exactly what the table
@@ -152,6 +142,16 @@ export function applySelection<Row>(
   return rows.filter((row, i) => getRowKey(row, i) === selectedKey);
 }
 
+/** Apply the filter row's terms to a set of rows.
+ *
+ *  Exported so a page driving the filters (see `filters` / `onFiltersChange`)
+ *  can work out which rows are on screen without re-implementing the rule and
+ *  drifting from it — a KPI tile that counts rows the table is not showing is
+ *  the bug this exists to prevent.
+ *
+ *  Case-insensitive substring per column, ANDed across columns — the same
+ *  behaviour people expect from a spreadsheet filter.
+ */
 export function applyFilters<Row>(
   rows: Row[],
   columns: Column<Row>[],
@@ -180,7 +180,10 @@ export default function DataTable<Row>({
   getRowKey,
   initialSort,
   emptyMessage = "No data yet.",
-  noMatchMessage = "Nothing matches the filters above.",
+  // Not "the filters above": a table can also be narrowed by `selectedKey`
+  // with no filter row on screen at all, and pointing at boxes that are not
+  // there is the same kind of wrong answer this message exists to avoid.
+  noMatchMessage = "Nothing matches the current filter.",
   rowClassName,
   onRowClick,
   maxBodyHeight,
