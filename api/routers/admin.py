@@ -414,18 +414,29 @@ async def creator_directory_status(
     tenant administrator cannot be expected to guess that from names quietly
     staying as email addresses.
     """
-    total = await session.scalar(select(func.count()).select_from(AgentCreator)) or 0
-    resolved = (
+    # Counted against the creators currently on agents, not against every row
+    # ever written. A directory row outlives the agents it was looked up for —
+    # someone's last agent gets deleted and the row stays — so counting rows
+    # would report "14 of 12 resolved", which reads as a bug in the arithmetic.
+    on_agents = select(func.distinct(func.lower(Agent.created_by_upn))).where(
+        Agent.created_by_upn.isnot(None), Agent.created_by_upn != ""
+    )
+    creators_on_agents = (
+        await session.scalar(select(func.count()).select_from(on_agents.subquery())) or 0
+    )
+    total = (
         await session.scalar(
-            select(func.count()).select_from(AgentCreator).where(AgentCreator.resolved)
+            select(func.count())
+            .select_from(AgentCreator)
+            .where(AgentCreator.upn.in_(on_agents))
         )
         or 0
     )
-    creators_on_agents = (
+    resolved = (
         await session.scalar(
-            select(func.count(func.distinct(func.lower(Agent.created_by_upn)))).where(
-                Agent.created_by_upn.isnot(None), Agent.created_by_upn != ""
-            )
+            select(func.count())
+            .select_from(AgentCreator)
+            .where(AgentCreator.resolved, AgentCreator.upn.in_(on_agents))
         )
         or 0
     )

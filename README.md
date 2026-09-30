@@ -25,6 +25,10 @@ Password sign-in for the admin account, with Entra single sign-on offered alongs
 
 Where anyone signing in with a work account lands: the agents Copilot Studio records *them* as the maker of, how many are scored, the lowest grade among them, and how many findings are still open — with the step across to the organisation view shown, and locked with an explanation when they are outside the approved group.
 
+It also answers "am I doing this well?" two ways: their agents' **average score per scan**, as bars with a trend line over the last three, and **How you compare** — them, their team and the organisation, on agents created and average score, with their percentile stated against the organisation.
+
+The team series is **withheld when the group is smaller than five other people**, and that is a disclosure rule rather than a preference: in a team of two, the team average next to your own figure gives the other person's exact number. Where it is withheld the panel says which of four reasons applies, and one of them is specific to this app — somebody who has never created an agent has no directory record here at all, because the lookup covers agent creators and nobody else. That is not a gap in their Entra profile, and the wording says so.
+
 ![Your agents](docs/screenshots/personal.png)
 
 ### Overview — every agent, every environment
@@ -45,7 +49,11 @@ It also names the rules failing on the most agents, which is usually the cheapes
 
 Who is building the agents, and how their agents score — agent count, average score with its grade, grade spread, open findings and environments, filterable per column and sorted worst-average-first, because the question this page answers is "who needs help".
 
-This is **not** a tenant directory, and it does not pretend to be one. The app has no directory data at all: its worker reads Dataverse, not Microsoft Graph, so the only trace of a person in the database is the maker Copilot Studio stamps on an agent. Somebody who has never built an agent does not appear here.
+Names, departments and managers come from **Entra**, looked up for the people already recorded as agent creators — and for nobody else. It is still **not** a tenant directory and does not pretend to be one: somebody who has never built an agent is never looked up and does not appear here.
+
+A creator the lookup cannot resolve — someone who has left, or a service principal that built an agent — is **kept and listed by sign-in address**, with a note saying so. Dropping them would silently remove their agents from the only page that counts them.
+
+This needs the **`User.Read.All`** application permission with admin consent (see *Prerequisites & permissions*). Without it the app still works exactly as it did before: names stay as sign-in addresses, and Settings says which permission is missing rather than leaving you to guess.
 
 ![Agent creators](docs/screenshots/creators.png)
 
@@ -71,7 +79,19 @@ Every rule in the catalogue, editable: enable or disable it, change its scoring 
 
 ### History
 
-Past scans per environment with their scores and grades, so a change in quality can be traced to when it happened.
+Average score over time, with the **best-to-worst spread shaded behind the line**, so direction and dispersion are read together: an average that climbs while one agent falls apart looks like progress on a plain line and looks like trouble as soon as the band is there. Underneath, the **biggest movers** since each agent was last measured — direction as ▲ ▼ *and* the words up/down, both scores, and both letter grades.
+
+Filterable by environment, creator and agent. Creators are listed by name, because of the lookup above.
+
+One point per scan, and gaps between scans are deliberately not filled in: a day with no scan is not a score of zero, it is no measurement, and drawing it flat would show a collapse that never happened.
+
+### Scan history
+
+The run log, under **Administration**: every scan and every directory lookup, newest first, with what kind it was, how long it took, what it wrote and whether it worked. Failures show their reason, and a scan that finished having scored only some of the agents it found is labelled **part-finished** — which was previously invisible anywhere in the product.
+
+Status is a shape plus a word (● Succeeded · ◐ In progress · ○ Failed), and a status or kind the app does not recognise is shown as itself rather than being filtered out: a run that happened and is not listed is worse than one labelled awkwardly.
+
+This is deliberately **not** the History page above. Both read the scan table; this one answers "did it run", that one answers "is quality moving".
 
 ![History](docs/screenshots/history.png)
 
@@ -211,8 +231,10 @@ than when their token expires.
 
 ### Where to find run history, logs, and errors
 
-- **In the app:** the **Overview** page shows live scan progress; **History** shows past scans with
-  scores; each environment card on **Settings** shows its last-scan time and agent count.
+- **In the app:** **Scan history** (under Administration) is the run log — every scan and directory
+  lookup, with duration, what it wrote and any failure reason. The **Overview** page shows live scan
+  progress, **History** shows how quality has moved, and each environment card on **Settings** shows
+  its last-scan time and agent count.
 - **Container logs (the real detail):** manual **Run now** / **Scan all** run inside the
   **`…-api-…`** Container App — open it → **Monitoring → Log stream** (live), or **Logs** to query
   `ContainerAppConsoleLogs_CL`. Scheduled background scans run in the **`…-worker-…`** Container App —
@@ -232,9 +254,10 @@ Every rule is **editable** from the Rules page: enable/disable it, change its sc
 ### What it does with the scores
 
 - **Executive briefing** — the tenant in a few sentences, with this period against the one before it: agents, average score, grade mix, open findings by severity, the rules failing most often, and the lowest-scoring agents. Deterministic by design — every figure is SQL and every sentence is assembled from fixed thresholds, so a briefing can never invent a number in front of a customer.
-- **Agent creators** — everyone recorded as having made an agent, with their agent count, average score and grade, grade spread, open findings and environments. Sorted worst-first and filterable per column. Built from the makers stamped on agents, not from a directory the app does not have.
-- **Your agents** — the personal view, derived entirely from the signed-in identity in the token.
-- **History** — past scans per environment, so a change in quality has a date attached.
+- **Agent creators** — everyone recorded as having made an agent, with their name, department and manager, agent count, average score and grade, grade spread, open findings and environments. Sorted worst-first and filterable per column. The directory details are an Entra lookup of **these people only** — never a tenant sync — and an unresolvable creator is kept, listed by sign-in address.
+- **Your agents** — the personal view, derived entirely from the signed-in identity in the token, with score-per-scan over time and a you / your team / your organisation comparison. The team series is withheld below five other people, so the comparison can never expose an individual's figures.
+- **History** — average score over time with the best-to-worst band behind it and the biggest movers since each agent was last measured, filterable by environment, creator and agent.
+- **Scan history** — the run log, under Administration: every scan and directory lookup with its kind, duration, what it wrote, and its failure reason. Part-finished scans are flagged.
 - **Admin by Entra group** — administration can be granted to the members of a security group instead of being one shared password. Membership is re-read on every request, so removing someone bites in minutes rather than at their next sign-in, and an unset group grants admin to nobody.
 - **Who is signed in, by name** — the sidebar shows the Entra display name above the UPN above the role, rather than an email address on its own.
 
@@ -264,8 +287,17 @@ permission. It needs read access to these tables:
 | Environment Variable Definition | Detects configuration handling. |
 | Solution | Solution hygiene rules (managed/unmanaged, publisher prefix). |
 
-Directory.Read.All on Microsoft Graph is needed **only** if you restrict dashboard viewers to an
-Entra security group.
+Two Microsoft Graph **application** permissions are optional, and each buys one thing:
+
+| Permission | Needed for | Without it |
+| --- | --- | --- |
+| `Directory.Read.All` | Restricting sign-in, the organisation view or admin rights to an Entra security group | The group gates cannot be used; the password account is unaffected |
+| `User.Read.All` | Resolving agent creators to names, departments and managers — which is what makes the Agent creators listing readable and the you/your-team comparison possible | Creators show as sign-in addresses, nobody gets a team comparison, and Settings names the missing permission |
+
+`User.Read.All` is a consent step for a Global Administrator (or Application Administrator), on the
+same app registration the Dataverse scan already uses. The lookup only ever asks Graph about UPNs
+already stamped on an agent — one request per person, `GET /users/{upn}` — and there is no call to
+the user collection in the codebase at all, so it cannot enumerate your directory.
 
 Setup is two parts, both scripted. The in-app **Setup guide** page and the Settings wizard carry
 copy-paste scripts for each:
@@ -387,6 +419,11 @@ Just evaluating? Skip steps 3–5 and use **Settings → Demo data → Load demo
   key and are write-only in the API: they can be set and replaced, never read back.
 - Scores are about **agent quality and hygiene**, not the people who built them. Creator names are
   shown so you know who to help, not to rank anyone.
+- The **creator lookup** sends Graph only the sign-in addresses already recorded on agents, and
+  stores only display name, department, job title, office and manager. It never enumerates the
+  directory, and it never looks up somebody who has not built an agent. Team comparisons are
+  averages over at least five other people — an individual's figures are never shown to a
+  colleague.
 - Application Insights (AGT-007) is always manual-review: Copilot Studio stores that connection
   outside Dataverse, so a service-principal scan cannot confirm it either way.
 - Demo data is clearly labelled as such in Settings, and is only ever created or removed by an
