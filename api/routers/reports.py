@@ -707,6 +707,7 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
                 "grades": {g: 0 for g in _GRADES},
                 "open_findings": 0,
                 "environment_ids": set(),
+                "agent_list": [],
             },
         )
         # Prefer a real name over None if any of their agents carries one.
@@ -719,14 +720,42 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
         )
         if env_id is not None:
             row["environment_ids"].add(env_id)
+        agent_findings = 0
         if score_row is not None:
             if score_row.score is not None:
                 row["scores"].append(score_row.score)
             if score_row.grade in row["grades"]:
                 row["grades"][score_row.grade] += 1
-            row["open_findings"] += open_by_key.get(
+            agent_findings = open_by_key.get(
                 (score_row.scan_id, score_row.agent_name), 0
             )
+            row["open_findings"] += agent_findings
+
+        # The agents themselves, not just the count. Selecting a creator on the
+        # page shows their agents underneath the table, and this is where they
+        # come from — assembled from rows already in hand rather than a second
+        # round trip, so "click a name" costs nothing.
+        #
+        # Shaped like ``/reports/all-agents`` plus open findings, so the panel
+        # links into the same agent scorecard as every other agent list here.
+        row["agent_list"].append(
+            {
+                "bot_id": agent.bot_id,
+                "agent_name": (
+                    score_row.agent_name if score_row is not None else agent.display_name
+                ),
+                "solution_name": score_row.solution_name if score_row else None,
+                "publish_state": (
+                    score_row.publish_state if score_row else agent.publish_state
+                ),
+                "score": score_row.score if score_row else None,
+                "grade": score_row.grade if score_row else None,
+                "scan_id": score_row.scan_id if score_row else None,
+                "environment_id": env_id,
+                "environment_name": env_names.get(env_id) if env_id is not None else None,
+                "open_findings": agent_findings,
+            }
+        )
 
     # Directory details, where the creator lookup has resolved them. This is the
     # difference between a page of sign-in addresses and a page of colleagues —
@@ -741,9 +770,16 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
     for key, row in creators.items():
         scores = row["scores"]
         entry = directory.get(key)
+        resolved = bool(entry and entry.resolved)
         out.append(
             {
                 "upn": row["upn"],
+                # The same address, trimmed only where it is safe to: a former
+                # user can reach this page with their object id stuck in front
+                # of their address, and 55 characters of that reads as broken
+                # data rather than as somebody who has left. The stored value is
+                # untouched and stays on the row as a tooltip.
+                "upn_display": metrics.readable_upn(row["upn"], resolved=resolved),
                 "display_name": (
                     (entry.display_name if entry and entry.display_name else None)
                     or row["display_name"]
@@ -756,7 +792,7 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
                 # Drives the "not in the directory" note on the row, so an
                 # address with no name beside it is explained rather than
                 # looking like missing data.
-                "directory_resolved": bool(entry and entry.resolved),
+                "directory_resolved": resolved,
                 "agents": row["agents"],
                 "scored_agents": len(scores),
                 "avg_score": round(sum(scores) / len(scores)) if scores else None,
@@ -764,6 +800,17 @@ async def agent_creators(session: AsyncSession = Depends(get_session)) -> list[d
                 "open_findings": row["open_findings"],
                 "environments": sorted(
                     env_names[e] for e in row["environment_ids"] if e in env_names
+                ),
+                # Worst agent first: the reason for opening one person's list is
+                # to find what needs fixing. Unscored agents sort last — an
+                # unknown is not a problem.
+                "agent_list": sorted(
+                    row["agent_list"],
+                    key=lambda a: (
+                        a["score"] is None,
+                        a["score"] if a["score"] is not None else 0,
+                        (a["agent_name"] or "").lower(),
+                    ),
                 ),
             }
         )

@@ -49,11 +49,15 @@ It also names the rules failing on the most agents, which is usually the cheapes
 
 ### Agent creators
 
-Who is building the agents, and how their agents score — agent count, average score with its grade, grade spread, open findings and environments, filterable per column and sorted worst-average-first, because the question this page answers is "who needs help".
+Who is building the agents, and how their agents score — agent count, average score with its grade, grade spread, open findings and environments, filterable per column and listed **alphabetically by name**, because a list of colleagues is looked *up* far more often than it is ranked. "Who needs help" is still one click: the **Avg score / 100** header sorts worst-first on the first press.
+
+**Click a name to see just that person's agents.** The page filters in place rather than opening a page of its own — the question is "and what are theirs, then?", asked while reading the table, so the answer arrives without leaving it. The click writes that person into the table's own Creator filter box, a banner above the table says whose agents you are looking at with a **Show all creators** button next to it, and their agents appear underneath, worst score first, each one clicking through to its scorecard. The four tiles at the top follow the filter and say so in their hints ("of 18 creators in the tenant"), so they are never quietly counting a different population from the list beneath them.
 
 Names, departments and managers come from **Entra**, looked up for the people already recorded as agent creators — and for nobody else. It is still **not** a tenant directory and does not pretend to be one: somebody who has never built an agent is never looked up and does not appear here.
 
 A creator the lookup cannot resolve — someone who has left, or a service principal that built an agent — is **kept and listed by sign-in address**, with a note saying so. Dropping them would silently remove their agents from the only page that counts them.
+
+Copilot Studio sometimes stamps such an agent with the maker's Entra object id run straight into their address (`20a43a6b…4cfjane.doe@contoso.com`), which reads as broken data rather than as somebody who has left. The row shows just the address part and keeps the stored value in its tooltip — nothing is rewritten, and the trim only ever applies to a creator the lookup **failed** on, whose remaining text is a complete address. Any address it cannot be certain about is left exactly as stored.
 
 This needs the **`User.Read.All`** application permission with admin consent (see *Prerequisites & permissions*). Without it the app still works exactly as it did before: names stay as sign-in addresses, and Settings says which permission is missing rather than leaving you to guess.
 

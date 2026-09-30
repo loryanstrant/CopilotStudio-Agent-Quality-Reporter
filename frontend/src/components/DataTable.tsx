@@ -25,6 +25,14 @@ export interface Column<Row> {
   align?: "left" | "right" | "center";
   /** Force-disable sorting even when an accessor is present. */
   sortable?: boolean;
+  /** Direction the FIRST click on this header sorts in. Defaults to the type's
+   *  own default (text A→Z, numbers/dates high→low).
+   *
+   *  Override it where the interesting end of a numeric column is the low end:
+   *  on a column of average scores, "worst first" is the question people click
+   *  the header to ask, and making them click twice to ask it is a small tax on
+   *  the common path. */
+  defaultSortDir?: SortDir;
   /** Extra classes for the body cell. */
   className?: string;
   /** Exclude this column from the filter row (only relevant when the table
@@ -58,6 +66,15 @@ interface Props<Row> {
   maxBodyHeight?: number | string;
   /** Show a per-column filter row, and a "N of M rows" count beneath. */
   filterable?: boolean;
+  /** Filter terms by column key. Pass this together with `onFiltersChange` to
+   *  drive the filter row from the page instead of from the table's own state.
+   *
+   *  A page needs that when something outside the table has to agree with it —
+   *  KPI tiles that must count the rows actually on screen, or a row click that
+   *  narrows the table to one person. Leave both out and the table keeps its
+   *  own state, which is what every other caller wants. */
+  filters?: Record<string, string>;
+  onFiltersChange?: (filters: Record<string, string>) => void;
 }
 
 function isEmpty(v: string | number | null | undefined): boolean {
@@ -78,9 +95,38 @@ function compareValues(
 }
 
 // New columns start in the most useful direction: text A→Z, numbers/dates
-// high→low (largest / newest first).
-function defaultDir(type: ColumnType): SortDir {
-  return type === "text" ? "asc" : "desc";
+// high→low (largest / newest first) — unless the column overrides it.
+function defaultDir<Row>(col: Column<Row>): SortDir {
+  if (col.defaultSortDir) return col.defaultSortDir;
+  return (col.type ?? "text") === "text" ? "asc" : "desc";
+}
+
+/** Apply the filter row's terms to a set of rows.
+ *
+ *  Exported so a page driving the filters (see `filters` / `onFiltersChange`)
+ *  can work out which rows are on screen without re-implementing the rule and
+ *  drifting from it — a KPI tile that counts rows the table is not showing is
+ *  the bug this exists to prevent.
+ *
+ *  Case-insensitive substring per column, ANDed across columns — the same
+ *  behaviour people expect from a spreadsheet filter.
+ */
+export function applyFilters<Row>(
+  rows: Row[],
+  columns: Column<Row>[],
+  filters: Record<string, string>,
+): Row[] {
+  const active = Object.entries(filters).filter(([, term]) => term.trim());
+  if (active.length === 0) return rows;
+  return rows.filter((row) =>
+    active.every(([key, term]) => {
+      const col = columns.find((c) => c.key === key);
+      if (!col?.accessor) return true;
+      return String(col.accessor(row) ?? "")
+        .toLowerCase()
+        .includes(term.trim().toLowerCase());
+    }),
+  );
 }
 
 function defaultDisplay(v: string | number | null | undefined): ReactNode {
@@ -97,26 +143,22 @@ export default function DataTable<Row>({
   onRowClick,
   maxBodyHeight,
   filterable = false,
+  filters: filtersProp,
+  onFiltersChange,
 }: Props<Row>) {
   const [sort, setSort] = useState<SortState | null>(initialSort ?? null);
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [ownFilters, setOwnFilters] = useState<Record<string, string>>({});
+  const filters = filtersProp ?? ownFilters;
+  const setFilter = (key: string, term: string) => {
+    const next = { ...filters, [key]: term };
+    if (onFiltersChange) onFiltersChange(next);
+    else setOwnFilters(next);
+  };
 
-  // Case-insensitive substring per column, ANDed across columns — the same
-  // behaviour people expect from a spreadsheet filter.
-  const filteredRows = useMemo(() => {
-    if (!filterable) return rows;
-    const active = Object.entries(filters).filter(([, term]) => term.trim());
-    if (active.length === 0) return rows;
-    return rows.filter((row) =>
-      active.every(([key, term]) => {
-        const col = columns.find((c) => c.key === key);
-        if (!col?.accessor) return true;
-        return String(col.accessor(row) ?? "")
-          .toLowerCase()
-          .includes(term.trim().toLowerCase());
-      }),
-    );
-  }, [rows, columns, filters, filterable]);
+  const filteredRows = useMemo(
+    () => (filterable ? applyFilters(rows, columns, filters) : rows),
+    [rows, columns, filters, filterable],
+  );
 
   const sortedRows = useMemo(() => {
     const rows = filteredRows;
@@ -140,11 +182,10 @@ export default function DataTable<Row>({
   }, [filteredRows, sort, columns]);
 
   function toggle(col: Column<Row>) {
-    const type = col.type ?? "text";
     setSort((prev) =>
       prev && prev.key === col.key
         ? { key: col.key, dir: prev.dir === "asc" ? "desc" : "asc" }
-        : { key: col.key, dir: defaultDir(type) },
+        : { key: col.key, dir: defaultDir(col) },
     );
   }
 
@@ -208,9 +249,7 @@ export default function DataTable<Row>({
                     {canFilter && (
                       <input
                         value={filters[col.key] ?? ""}
-                        onChange={(e) =>
-                          setFilters((f) => ({ ...f, [col.key]: e.target.value }))
-                        }
+                        onChange={(e) => setFilter(col.key, e.target.value)}
                         placeholder="Filter…"
                         aria-label={`Filter by ${col.header}`}
                         className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs font-normal normal-case tracking-normal text-slate-700 outline-none focus:border-brand-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
@@ -238,8 +277,10 @@ export default function DataTable<Row>({
                 key={getRowKey(row, i)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={`border-t border-slate-100 dark:border-slate-700 ${
-                  rowClassName?.(row) ?? ""
-                }`}
+                  onRowClick
+                    ? "cursor-pointer hover:bg-slate-100/60 dark:hover:bg-slate-700/50"
+                    : ""
+                } ${rowClassName?.(row) ?? ""}`}
               >
                 {columns.map((col, j) => {
                   const numeric = col.type === "number" || col.type === "date";

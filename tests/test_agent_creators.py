@@ -16,6 +16,7 @@ from api.auth import create_access_token
 from shared.db import SessionLocal
 from shared.models import (
     Agent,
+    AgentCreator,
     AgentScore,
     AppConfig,
     AppUser,
@@ -227,3 +228,109 @@ async def test_scores_come_from_the_most_recent_scan(client):
     grace = next(r for r in rows if r["upn"] == "grace@contoso.com")
     assert grace["avg_score"] == 95
     assert grace["grades"]["A"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# Each creator's agents, so clicking a name on the page can show them
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_each_creator_carries_their_own_agents(client):
+    """The page filters in place rather than routing to a per-creator page, so
+    the agents come down with the creators rather than from a second call."""
+    await _seed()
+    rows = (
+        await client.get("/reports/agent-creators", headers=await _admin_headers())
+    ).json()
+    ada = next(r for r in rows if r["upn"].lower() == "ada@contoso.com")
+
+    assert len(ada["agent_list"]) == ada["agents"] == 2
+    assert {a["bot_id"] for a in ada["agent_list"]} == {"bot-1", "bot-2"}
+    # Enough to render a row and click through to the scorecard.
+    bot2 = next(a for a in ada["agent_list"] if a["bot_id"] == "bot-2")
+    assert bot2["agent_name"] == "Agent bot-2"
+    assert (bot2["score"], bot2["grade"], bot2["open_findings"]) == (80, "B", 2)
+    assert bot2["environment_name"] == "Contoso"
+    assert bot2["scan_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_creators_agents_are_worst_first(client):
+    """Opening one person's list is a request to find what needs fixing."""
+    await _seed()
+    rows = (
+        await client.get("/reports/agent-creators", headers=await _admin_headers())
+    ).json()
+    ada = next(r for r in rows if r["upn"].lower() == "ada@contoso.com")
+    assert [a["score"] for a in ada["agent_list"]] == [80, 90]
+
+
+@pytest.mark.asyncio
+async def test_an_unscanned_agent_is_listed_with_no_score(client):
+    """It belongs to its creator whether or not a scan has reached it, and it
+    sorts last — an unknown is not a problem."""
+    async with SessionLocal() as s:
+        env = Environment(display_name="Contoso", enabled=True)
+        s.add(env)
+        await s.flush()
+        s.add(
+            Agent(
+                bot_id="bot-9",
+                environment_id=env.id,
+                display_name="Unscanned",
+                created_by_name="Ada Lovelace",
+                created_by_upn="ada@contoso.com",
+                last_seen=NOW,
+            )
+        )
+        await s.commit()
+    await _seed()
+
+    rows = (
+        await client.get("/reports/agent-creators", headers=await _admin_headers())
+    ).json()
+    ada = next(r for r in rows if r["upn"].lower() == "ada@contoso.com")
+    assert ada["agent_list"][-1]["bot_id"] == "bot-9"
+    assert ada["agent_list"][-1]["score"] is None
+    assert ada["agent_list"][-1]["agent_name"] == "Unscanned"
+
+
+@pytest.mark.asyncio
+async def test_an_unresolved_creators_address_is_shown_readably_but_stored_intact(client):
+    """A former user can reach this page with their Entra object id run into
+    their address. The row shows the address part; the stored value is what the
+    app still reports, because it is the thing to quote when somebody asks why
+    the lookup failed."""
+    mashed = "20a43a6b4ea043858a0efbb9e20ce4cfjustin.bell@contoso.com"
+    async with SessionLocal() as s:
+        env = Environment(display_name="Contoso", enabled=True)
+        s.add(env)
+        await s.flush()
+        s.add(
+            Agent(
+                bot_id="bot-7",
+                environment_id=env.id,
+                display_name="Leavers bot",
+                created_by_name="Justin Bell",
+                created_by_upn=mashed,
+                last_seen=NOW,
+            )
+        )
+        s.add(AgentCreator(upn=mashed.lower(), resolved=False, error="not found"))
+        await s.commit()
+
+    rows = (
+        await client.get("/reports/agent-creators", headers=await _admin_headers())
+    ).json()
+    row = next(r for r in rows if r["upn"] == mashed)
+    assert row["directory_resolved"] is False
+    assert row["upn"] == mashed
+    assert row["upn_display"] == "justin.bell@contoso.com"
+
+
+@pytest.mark.asyncio
+async def test_an_ordinary_address_is_displayed_exactly_as_stored(client):
+    await _seed()
+    rows = (
+        await client.get("/reports/agent-creators", headers=await _admin_headers())
+    ).json()
+    assert all(r["upn_display"] == r["upn"] for r in rows)
