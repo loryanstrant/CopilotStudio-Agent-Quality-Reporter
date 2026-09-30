@@ -116,6 +116,9 @@ export default function Layout({ children }: { children: ReactNode }) {
               <NavLink to="/rules" className={navClass}>
                 Rules
               </NavLink>
+              <NavLink to="/scan-history" className={navClass}>
+                Scan history
+              </NavLink>
               <NavLink to="/settings" className={navClass}>
                 Settings
               </NavLink>

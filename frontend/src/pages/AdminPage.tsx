@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api } from "../api/client";
-import { AppConfig, Environment } from "../api/types";
+import { AppConfig, CreatorDirectoryStatus, Environment } from "../api/types";
 import SetupWizard from "../components/SetupWizard";
 import DemoDataCard from "../components/DemoDataCard";
 import { buildStamp } from "../lib/buildStamp";
@@ -27,6 +27,7 @@ export default function AdminPage() {
   const [envs, setEnvs] = useState<Environment[]>([]);
   const [about, setAbout] = useState<{ version: string; engine_version: string; catalogue_hash: string; build_date: string | null; build_time: string | null } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [directory, setDirectory] = useState<CreatorDirectoryStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [redirectUri, setRedirectUri] = useState("");
 
@@ -42,6 +43,10 @@ export default function AdminPage() {
     setCfg(await api.get<AppConfig>("/admin/config"));
     setEnvs(await api.get<Environment[]>("/admin/environments"));
     api.get<typeof about>("/admin/about").then(setAbout).catch(() => {});
+    api
+      .get<CreatorDirectoryStatus>("/admin/creator-directory")
+      .then(setDirectory)
+      .catch(() => setDirectory(null));
     api
       .get<{ redirect_uri: string }>("/auth/config")
       .then((a) => setRedirectUri(a.redirect_uri))
@@ -236,6 +241,68 @@ export default function AdminPage() {
           >
             Manage rules →
           </Link>
+        </div>
+      </div>
+
+      {/* The creator directory, and its one likely failure.
+          Without User.Read.All consented, every lookup returns 403 and the only
+          visible symptom is that names quietly stay as email addresses — which
+          nobody would guess needs a consent. So the state is stated here, with
+          the permission named. */}
+      <div className="card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100">
+              Creator directory
+            </h3>
+            <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+              Looks up the people already recorded as agent creators in Entra, to show real
+              names and departments and to compare somebody with their team. It looks up{" "}
+              <strong>only</strong> those people — never the whole directory — and needs the{" "}
+              <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">User.Read.All</code>{" "}
+              application permission with admin consent on the service principal above.
+            </p>
+            {directory && (
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                {directory.resolved} of {directory.creators_on_agents} creator
+                {directory.creators_on_agents === 1 ? "" : "s"} resolved
+                {directory.known > directory.resolved &&
+                  ` · ${directory.known - directory.resolved} kept by sign-in address`}
+                {directory.last_run_at
+                  ? ` · last run ${new Date(directory.last_run_at).toLocaleString()}`
+                  : " · never run"}
+              </p>
+            )}
+            {directory?.last_run_error && (
+              <p className="mt-2 text-sm text-rose-700 dark:text-rose-400">
+                ○ Last lookup failed: {directory.last_run_error}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            className="btn-secondary shrink-0"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const r = await api.post<{ status: string; detail: string }>(
+                  "/admin/refresh-creator-directory?force=true",
+                  {},
+                );
+                setMsg(r.detail);
+                setDirectory(
+                  await api.get<CreatorDirectoryStatus>("/admin/creator-directory"),
+                );
+              } catch (e) {
+                setMsg((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Look up creators now
+          </button>
         </div>
       </div>
 

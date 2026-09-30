@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { MyAgentCard, MySummary } from "../api/types";
+import {
+  MyAgentCard,
+  MySummary,
+  PeerComparisonData,
+  QualityPoint,
+} from "../api/types";
+import ChartCard from "../components/ChartCard";
 import { gradeColor, scoreColor } from "../components/chartTheme";
 import { useAuth } from "../auth/AuthContext";
 import KpiCard from "../components/KpiCard";
+import PeerComparison from "../components/PeerComparison";
+import ScoreTimeline from "../components/ScoreTimeline";
 
 /** "1 agent" / "3 agents" — a subtitle that says "1 agents" reads like a bug. */
 function plural(n: number, noun: string): string {
@@ -75,6 +83,8 @@ export default function PersonalPage() {
   const nav = useNavigate();
   const [summary, setSummary] = useState<MySummary | null>(null);
   const [agents, setAgents] = useState<MyAgentCard[]>([]);
+  const [comparison, setComparison] = useState<PeerComparisonData | null>(null);
+  const [timeline, setTimeline] = useState<QualityPoint[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   // No user id is passed here, and none is accepted: the API reads the person
@@ -91,6 +101,18 @@ export default function PersonalPage() {
         setAgents(a);
       })
       .catch((e) => setErr((e as Error).message));
+
+    // The comparison and the timeline are loaded separately and never block the
+    // page: they are context for the figures above, and a person whose team is
+    // withheld still needs their own agents to render.
+    api
+      .get<PeerComparisonData>("/reports/me/comparison")
+      .then(setComparison)
+      .catch(() => setComparison(null));
+    api
+      .get<QualityPoint[]>("/reports/me/score-timeline")
+      .then(setTimeline)
+      .catch(() => setTimeline([]));
   }, [user?.has_personal_view]);
 
   // The password admin has no directory identity, so there is nothing personal
@@ -167,6 +189,16 @@ export default function PersonalPage() {
                   : "Nothing outstanding"
               }
             />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <ChartCard
+              title="Score over time"
+              subtitle="Your agents' average score per scan, with the trend over the last three"
+            >
+              <ScoreTimeline points={timeline} />
+            </ChartCard>
+            {comparison && <PeerComparison data={comparison} />}
           </div>
 
           <div className="card p-5">

@@ -9,6 +9,7 @@ import AgentCreatorsPage from "./pages/AgentCreatorsPage";
 import PersonalPage from "./pages/PersonalPage";
 import AgentDetailPage from "./pages/AgentDetailPage";
 import HistoryPage from "./pages/HistoryPage";
+import ScanHistoryPage from "./pages/ScanHistoryPage";
 import AdminPage from "./pages/AdminPage";
 import RulesPage from "./pages/RulesPage";
 import SetupGuidePage from "./pages/SetupGuidePage";
@@ -77,6 +78,13 @@ export default function App() {
         <Route
           path="/settings"
           element={user.role === "admin" ? <AdminPage /> : <Navigate to="/" replace />}
+        />
+        {/* The run log is administration, not reporting: it exposes failure
+            detail from the tenant connection, so it is gated exactly as
+            Settings is. */}
+        <Route
+          path="/scan-history"
+          element={user.role === "admin" ? <ScanHistoryPage /> : <Navigate to="/" replace />}
         />
         <Route
           path="/rules"

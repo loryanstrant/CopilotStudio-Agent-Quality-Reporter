@@ -1,107 +1,198 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-import { ScanRow } from "../api/types";
-import { gradeColor } from "../components/chartTheme";
+import type { QualityTimeline, TimelineFilters } from "../api/types";
+import ChartCard from "../components/ChartCard";
+import MoversList from "../components/MoversList";
+import QualityTrend from "../components/QualityTrend";
 
-type SortKey = "started_at" | "environment" | "source" | "trigger" | "agent_count" | "avg_score" | "grade";
-
+/**
+ * How quality has moved — not what has run.
+ *
+ * This page used to be a table of scans, which was really a run log wearing the
+ * History name. The run log now has its own page under ADMINISTRATION, and this
+ * one answers the question the name promises: is quality getting better, and
+ * what moved. Both read the `scans` table; they ask different things of it.
+ */
 export default function HistoryPage() {
-  const [scans, setScans] = useState<ScanRow[]>([]);
-  const [sortKey, setSortKey] = useState<SortKey>("started_at");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [filters, setFilters] = useState<TimelineFilters | null>(null);
+  const [data, setData] = useState<QualityTimeline | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const [environmentId, setEnvironmentId] = useState<string>("");
+  const [creatorUpn, setCreatorUpn] = useState<string>("");
+  const [botId, setBotId] = useState<string>("");
 
   useEffect(() => {
-    api.get<ScanRow[]>("/reports/scans").then(setScans).catch(() => setScans([]));
+    api
+      .get<TimelineFilters>("/reports/timeline-filters")
+      .then(setFilters)
+      .catch(() => setFilters({ environments: [], creators: [], agents: [] }));
   }, []);
 
-  const toggleSort = (k: SortKey) => {
-    if (k === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(k);
-      setSortDir(k === "agent_count" || k === "avg_score" || k === "started_at" ? "desc" : "asc");
-    }
-  };
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (environmentId) params.set("environment_id", environmentId);
+    if (creatorUpn) params.set("creator_upn", creatorUpn);
+    if (botId) params.set("bot_id", botId);
+    const query = params.toString();
+    setData(null);
+    api
+      .get<QualityTimeline>(`/reports/quality-timeline${query ? `?${query}` : ""}`)
+      .then(setData)
+      .catch((e) => setErr((e as Error).message));
+  }, [environmentId, creatorUpn, botId]);
 
-  const sorted = useMemo(() => {
-    const rows = [...scans];
-    rows.sort((a, b) => {
-      const av = a[sortKey];
-      const bv = b[sortKey];
-      let cmp: number;
-      if (typeof av === "number" || typeof bv === "number") {
-        cmp = (av == null ? -Infinity : (av as number)) - (bv == null ? -Infinity : (bv as number));
-      } else {
-        cmp = String(av ?? "").localeCompare(String(bv ?? ""));
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return rows;
-  }, [scans, sortKey, sortDir]);
+  const summary = useMemo(() => {
+    const points = data?.points ?? [];
+    if (points.length === 0) return null;
+    const first = points[0];
+    const last = points[points.length - 1];
+    return {
+      scans: points.length,
+      latest: last.avg_score,
+      change: last.avg_score - first.avg_score,
+      spread: last.max_score - last.min_score,
+      agents: last.agents,
+    };
+  }, [data]);
 
-  const Th = ({ label, k }: { label: string; k: SortKey }) => (
-    <th
-      className="py-2 pr-3 font-medium cursor-pointer select-none hover:text-slate-900 dark:hover:text-slate-100"
-      onClick={() => toggleSort(k)}
-    >
-      {label}
-      <span className="ml-1 text-xs">{sortKey === k ? (sortDir === "asc" ? "▲" : "▼") : "↕"}</span>
-    </th>
-  );
+  const selectedCreator = filters?.creators.find((c) => c.upn === creatorUpn);
+
+  if (err) return <div className="text-fail">{err}</div>;
 
   return (
     <div className="space-y-6">
-    <div>
-      <h1 className="text-2xl font-bold">History</h1>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        Every scan that has run, with the agents covered and the resulting score.
-      </p>
-    </div>
-    <div className="card p-5">
-      <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
-        Scan history
-      </h3>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-            <Th label="When" k="started_at" />
-            <Th label="Environment" k="environment" />
-            <Th label="Source" k="source" />
-            <Th label="Trigger" k="trigger" />
-            <Th label="Agents" k="agent_count" />
-            <Th label="Avg" k="avg_score" />
-            <Th label="Grade" k="grade" />
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((s) => (
-            <tr key={s.id} className="border-b border-slate-200 dark:border-slate-700">
-              <td className="py-2 pr-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                {s.started_at ? new Date(s.started_at).toLocaleString() : ""}
-              </td>
-              <td className="py-2 pr-3 text-slate-900 dark:text-slate-100">{s.environment}</td>
-              <td className="py-2 pr-3 text-slate-500 dark:text-slate-400">{s.source}</td>
-              <td className="py-2 pr-3 text-slate-500 dark:text-slate-400">{s.trigger}</td>
-              <td className="py-2 pr-3 text-slate-500 dark:text-slate-400">{s.agent_count}</td>
-              <td className="py-2 pr-3 font-semibold text-slate-900 dark:text-slate-100">{s.avg_score ?? "–"}</td>
-              <td className="py-2 pr-3">
-                {s.grade && (
-                  <span className="pill text-white" style={{ background: gradeColor(s.grade) }}>
-                    {s.grade}
-                  </span>
-                )}
-              </td>
-            </tr>
-          ))}
-          {sorted.length === 0 && (
-            <tr>
-              <td colSpan={7} className="py-6 text-center text-slate-500 dark:text-slate-400">
-                No scans recorded yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">History</h1>
+        <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
+          Average score over time, with the best and worst agent in each scan shaded behind
+          it — so a rising average that hides one agent falling apart is visible. Looking for
+          whether a scan ran? That is <strong>Scan history</strong>, under Administration.
+        </p>
       </div>
+
+      <div className="card flex flex-wrap items-end gap-4 p-4">
+        <Picker
+          label="Environment"
+          value={environmentId}
+          onChange={setEnvironmentId}
+          allLabel="All environments"
+          options={(filters?.environments ?? []).map((e) => ({
+            value: String(e.id),
+            label: e.label,
+          }))}
+        />
+        <Picker
+          label="Creator"
+          value={creatorUpn}
+          onChange={setCreatorUpn}
+          allLabel="All creators"
+          options={(filters?.creators ?? []).map((c) => ({
+            value: c.upn,
+            // Real names, because the creator directory resolves them. An
+            // unresolved creator keeps their sign-in address rather than being
+            // left out of the filter that is meant to find their agents.
+            label: c.department ? `${c.label} · ${c.department}` : c.label,
+          }))}
+        />
+        <Picker
+          label="Agent"
+          value={botId}
+          onChange={setBotId}
+          allLabel="All agents"
+          options={(filters?.agents ?? []).map((a) => ({
+            value: a.bot_id,
+            label: a.label,
+          }))}
+        />
+        {(environmentId || creatorUpn || botId) && (
+          <button
+            type="button"
+            className="btn-secondary text-sm"
+            onClick={() => {
+              setEnvironmentId("");
+              setCreatorUpn("");
+              setBotId("");
+            }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      <ChartCard
+        title="Average score over time"
+        subtitle={
+          summary
+            ? `${summary.scans} scan${summary.scans === 1 ? "" : "s"} · latest average ${
+                summary.latest
+              }/100 across ${summary.agents} agent${summary.agents === 1 ? "" : "s"} · ${
+                summary.change === 0
+                  ? "no net change"
+                  : `${summary.change > 0 ? "up" : "down"} ${Math.abs(
+                      summary.change,
+                    )} since the earliest scan shown`
+              } · spread of ${summary.spread} between best and worst`
+            : selectedCreator
+              ? `${selectedCreator.label}'s agents`
+              : "Every scored scan in the selection"
+        }
+      >
+        {data ? (
+          <QualityTrend points={data.points} />
+        ) : (
+          <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+        )}
+      </ChartCard>
+
+      <ChartCard
+        title="Biggest movers"
+        subtitle={
+          data?.from_at && data?.to_at
+            ? `Since each agent was last measured, up to ${new Date(
+                data.to_at,
+              ).toLocaleString()}`
+            : "Since the previous scan"
+        }
+      >
+        {data ? (
+          <MoversList movers={data.movers} />
+        ) : (
+          <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+        )}
+      </ChartCard>
     </div>
+  );
+}
+
+function Picker({
+  label,
+  value,
+  onChange,
+  options,
+  allLabel,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  allLabel: string;
+}) {
+  return (
+    <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+      {label}
+      <select
+        className="input min-w-[14rem] text-sm"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">{allLabel}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

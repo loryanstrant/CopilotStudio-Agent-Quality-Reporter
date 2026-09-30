@@ -220,6 +220,13 @@ export interface Briefing {
 export interface AgentCreator {
   upn: string;
   display_name: string | null;
+  /** Directory details, present once the creator lookup has resolved them.
+   *  Null on an unresolved creator, who is still listed — by UPN. */
+  department: string | null;
+  job_title: string | null;
+  manager_name: string | null;
+  office_location: string | null;
+  directory_resolved: boolean;
   agents: number;
   scored_agents: number;
   avg_score: number | null;
@@ -230,4 +237,100 @@ export interface AgentCreator {
 
 export function cleanPP(value: string | null | undefined): string {
   return (value || "").replace(/^\s*slide\s+\d+\s*[-–—:]\s*/i, "").trim();
+}
+
+/** You, your team and your organisation, on the two measures this app has.
+ *
+ *  `team` is null when it is withheld, and `team_omitted_reason` says which of
+ *  the four reasons applies — they are not interchangeable, and the sentence
+ *  shown must not imply a problem with the reader's directory record when the
+ *  real reason is that they have never created an agent. */
+export interface PeerSeries {
+  agents: number;
+  avg_score: number | null;
+}
+
+export type TeamOmittedReason =
+  | "not_a_creator"
+  | "directory_unresolved"
+  | "unknown_team"
+  | "too_small";
+
+export interface PeerComparisonData {
+  period_from: string | null;
+  period_to: string | null;
+  mine: PeerSeries;
+  team: PeerSeries | null;
+  team_label: string | null;
+  team_size: number;
+  team_omitted_reason: TeamOmittedReason | null;
+  organisation: PeerSeries;
+  organisation_size: number;
+  percentile: { agents: number | null; avg_score: number | null };
+}
+
+/** One scan's worth of quality: the average, and the spread behind it. */
+export interface QualityPoint {
+  scan_id: number;
+  captured_at: string | null;
+  agents: number;
+  avg_score: number;
+  min_score: number;
+  max_score: number;
+}
+
+export interface Mover {
+  bot_id: string;
+  agent_name: string;
+  from_score: number;
+  to_score: number;
+  delta: number;
+  direction: "up" | "down";
+  from_grade: string;
+  to_grade: string;
+  captured_at: string | null;
+}
+
+export interface QualityTimeline {
+  points: QualityPoint[];
+  from_at: string | null;
+  to_at: string | null;
+  movers: Mover[];
+}
+
+export interface TimelineFilters {
+  environments: { id: number; label: string }[];
+  creators: { upn: string; label: string; department: string | null; agents: number }[];
+  agents: { bot_id: string; label: string }[];
+}
+
+/** One row of the run log — a scan, or a directory sync. */
+export interface RunLogRow {
+  id: string;
+  scan_id: number | null;
+  kind: string;
+  raw_kind: string;
+  environment: string | null;
+  state: string;
+  raw_status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_seconds: number | null;
+  agents_found: number | null;
+  agents_scored: number | null;
+  partial: boolean;
+  score: number | null;
+  grade: string | null;
+  engine_version: string | null;
+  error: string | null;
+  wrote: Record<string, unknown>;
+}
+
+export interface CreatorDirectoryStatus {
+  creators_on_agents: number;
+  known: number;
+  resolved: number;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  last_run_error: string | null;
 }

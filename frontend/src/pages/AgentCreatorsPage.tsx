@@ -70,11 +70,16 @@ export default function AgentCreatorsPage() {
     const needHelp = rows.filter(
       (r) => r.avg_score !== null && r.avg_score < C_FLOOR,
     ).length;
+    const departments = new Set(
+      rows.map((r) => r.department).filter((d): d is string => Boolean(d)),
+    );
     const findings = rows.reduce((n, r) => n + r.open_findings, 0);
     const withFindings = rows.filter((r) => r.open_findings > 0).length;
     return {
       creators: rows.length,
       agents,
+      departments: departments.size,
+      unresolved: rows.filter((r) => !r.directory_resolved).length,
       environments: environments.size,
       needHelp,
       findings,
@@ -96,13 +101,29 @@ export default function AgentCreatorsPage() {
       render: (r) => (
         <div className="min-w-0">
           <div className="truncate">{r.display_name || r.upn}</div>
-          {r.display_name && (
+          {r.display_name !== r.upn && (
             <div className="truncate text-xs font-normal text-slate-400 dark:text-slate-500">
               {r.upn}
+              {/* A creator the directory could not resolve is kept and shown by
+                  sign-in address. Saying so is the difference between a row
+                  that looks unfinished and one that is explained — they may
+                  have left, or be a service principal that built an agent. */}
+              {!r.directory_resolved && " · not found in the directory"}
             </div>
           )}
         </div>
       ),
+    },
+    {
+      key: "department",
+      header: "Department",
+      accessor: (r) => r.department ?? "",
+      render: (r) =>
+        r.department ?? (
+          <span className="text-slate-400" title="No directory record for this creator">
+            Unknown
+          </span>
+        ),
     },
     { key: "agents", header: "Agents", type: "number", align: "right", accessor: (r) => r.agents },
     {
@@ -152,6 +173,12 @@ export default function AgentCreatorsPage() {
       accessor: (r) => r.open_findings,
     },
     {
+      key: "manager",
+      header: "Manager",
+      accessor: (r) => r.manager_name ?? "",
+      render: (r) => r.manager_name ?? <span className="text-slate-400">—</span>,
+    },
+    {
       key: "environments",
       header: "Environments",
       accessor: (r) => r.environments.join(", "),
@@ -169,8 +196,10 @@ export default function AgentCreatorsPage() {
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
           Everyone Copilot Studio records as having created an agent, with how their agents
-          score. This is built from the makers stamped on the agents themselves — it is not a
-          tenant directory, so somebody who has never made an agent does not appear here.
+          score. Names and departments come from looking these people up in Entra —
+          <em> only</em> these people. It is still not a tenant directory: somebody who has
+          never made an agent is never looked up and does not appear here, and a creator the
+          lookup cannot resolve is kept and listed by sign-in address rather than dropped.
         </p>
       </div>
 
@@ -178,7 +207,14 @@ export default function AgentCreatorsPage() {
         <KpiCard
           label="Creators"
           value={stats.creators}
-          hint={`Across ${plural(stats.environments, "environment")}`}
+          hint={
+            stats.departments > 0
+              ? `${plural(stats.departments, "department")}, ${plural(
+                  stats.environments,
+                  "environment",
+                )}`
+              : `Across ${plural(stats.environments, "environment")}`
+          }
         />
         <KpiCard
           label="Agents attributed"
