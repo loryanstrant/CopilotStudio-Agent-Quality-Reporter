@@ -26,6 +26,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
 
+from scripts._demo_tenant import DOMAIN, ENVIRONMENTS, roster
 from shared.db import SessionLocal
 from shared.models import (
     Agent,
@@ -41,11 +42,21 @@ from shared.models import (
 )
 from worker.creators import JOB_NAME as CREATOR_JOB_NAME
 
-_ENVIRONMENTS = [
-    ("Contoso (default)", "https://contoso.crm6.dynamics.com"),
-    ("Contoso — UAT", "https://contoso-uat.crm6.dynamics.com"),
-    ("Contoso — Dev", "https://contoso-dev.crm6.dynamics.com"),
-]
+
+def _org_url(display_name: str) -> str:
+    """The Dataverse org URL a Power Platform environment of this name would have.
+
+    "Avanoso (default)" -> https://avanoso.crm6.dynamics.com
+    "Avanoso — UAT"     -> https://avanoso-uat.crm6.dynamics.com
+    """
+    slug = display_name.lower().replace(" (default)", "").replace("—", "-")
+    slug = "-".join(part for part in slug.replace(" ", "-").split("-") if part)
+    return f"https://{slug}.crm6.dynamics.com"
+
+
+# Environment names come from the shared Avanoso tenant so the suite agrees on
+# which fictional organisation it is reporting on.
+_ENVIRONMENTS = [(name, _org_url(name)) for name in ENVIRONMENTS]
 
 _AGENT_NAMES = [
     "HR Policy Assistant", "IT Service Desk Bot", "Expense Helper",
@@ -58,25 +69,23 @@ _AGENT_NAMES = [
 ]
 
 # Agent makers, with a deliberately uneven share of the agents. Every demo
-# agent used to be created by one address, "demo@contoso.local", which made the
-# Agent creators listing a single row and the personal view either everything or
-# nothing — neither of which is what either page looks like in a real tenant.
-# The weights give a couple of prolific makers, a middle, and a long tail.
+# agent used to be created by one address, a single "demo" service account,
+# which made the Agent creators listing a single row and the personal view
+# either everything or nothing — neither of which is what either page looks like
+# in a real tenant. The weights give a couple of prolific makers, a middle, and
+# a long tail.
+#
+# Only the names and addresses come from the shared Avanoso roster, so the
+# makers here are the same employees the sibling solutions report on. Their
+# department, office and job title do NOT: those are assigned below from this
+# repo's own lists, because the two-department round robin is load-bearing for
+# the five-peer disclosure threshold (see ``_maker_department``). Taking the
+# roster's own departments would reintroduce the small-team problem that round
+# robin exists to solve.
+_MAKER_WEIGHTS = [6, 5, 4, 3, 2, 1, 4, 3, 3, 2, 2, 2, 1, 1]
 _MAKERS = [
-    ("Ava Bennett", "ava.bennett@contoso.local", 6),
-    ("Noah Okafor", "noah.okafor@contoso.local", 5),
-    ("Mia Nguyen", "mia.nguyen@contoso.local", 4),
-    ("Priya Raman", "priya.raman@contoso.local", 3),
-    ("Tom Hargreaves", "tom.hargreaves@contoso.local", 2),
-    ("Sofia Marchetti", "sofia.marchetti@contoso.local", 1),
-    ("Daniel Whitlock", "daniel.whitlock@contoso.local", 4),
-    ("Grace Oyelaran", "grace.oyelaran@contoso.local", 3),
-    ("Hiro Tanaka", "hiro.tanaka@contoso.local", 3),
-    ("Elena Kovács", "elena.kovacs@contoso.local", 2),
-    ("Marcus Delaney", "marcus.delaney@contoso.local", 2),
-    ("Aisha Rahman", "aisha.rahman@contoso.local", 2),
-    ("Callum Reid", "callum.reid@contoso.local", 1),
-    ("Yara Haddad", "yara.haddad@contoso.local", 1),
+    (person.display_name, person.upn, weight)
+    for person, weight in zip(roster(len(_MAKER_WEIGHTS)), _MAKER_WEIGHTS)
 ]
 
 # Two departments, assigned by **round robin** rather than at random, and
@@ -122,7 +131,11 @@ def _maker_department(index: int) -> str:
 # One creator the directory cannot resolve, because that path has to be visible
 # in the demo: a service account that built an agent, kept and shown by its UPN
 # rather than dropped. Dropping it would take its agent out of every listing.
-_UNRESOLVED_MAKER = ("svc-agentbuilder", "svc-agentbuilder@contoso.local", 1)
+_UNRESOLVED_MAKER = (
+    "svc-agentbuilder",
+    f"svc-agentbuilder@{DOMAIN}",
+    1,
+)
 
 # The maker the local admin account is bound to when demo data is loaded, so
 # whoever is evaluating the product lands on a personal view with agents in it.

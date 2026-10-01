@@ -24,7 +24,7 @@ def _agents():
 
 
 def test_good_agent_scores_A():
-    res = _score_agent(_agents()["Contoso HR Assistant"])
+    res = _score_agent(_agents()["Avanoso HR Assistant"])
     assert res.score == 100
     assert res.grade == "A"
 
@@ -44,7 +44,7 @@ def test_default_solution_agent_fails_sol001():
 
 
 def test_custom_icon_scoring():
-    good = {f.rule_id: f for f in _score_agent(_agents()["Contoso HR Assistant"]).findings}
+    good = {f.rule_id: f for f in _score_agent(_agents()["Avanoso HR Assistant"]).findings}
     poor = {f.rule_id: f for f in _score_agent(_agents()["Test Bot"]).findings}
     assert good["AGT-009"].status == "pass"   # custom icon
     assert poor["AGT-009"].status == "fail"   # default icon shared across agents
@@ -68,5 +68,5 @@ def test_appinsights_is_manual_review_without_telemetry():
 
 def test_appinsights_passes_when_telemetry_observed():
     # The good demo agent has observed telemetry (run_count set) -> PASS.
-    good = {f.rule_id: f for f in _score_agent(_agents()["Contoso HR Assistant"]).findings}
+    good = {f.rule_id: f for f in _score_agent(_agents()["Avanoso HR Assistant"]).findings}
     assert good["AGT-007"].status == "pass"

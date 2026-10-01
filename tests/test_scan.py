@@ -22,7 +22,7 @@ async def test_demo_scan_and_agent_api(client, admin_token):
     agents = (await client.get(f"/reports/agents?scan_id={scan_id}", headers=headers)).json()
     assert len(agents) == 2
     by_name = {a["agent_name"]: a for a in agents}
-    assert by_name["Contoso HR Assistant"]["grade"] == "A"
+    assert by_name["Avanoso HR Assistant"]["grade"] == "A"
     assert by_name["Test Bot"]["grade"] == "C"
 
     bot_id = by_name["Test Bot"]["bot_id"]

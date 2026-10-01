@@ -1,8 +1,11 @@
 """FastAPI application entrypoint.
 
 Exposes ``/health``, mounts the auth/admin/reports routers, serves the built SPA
-in production, runs migrations + admin seeding on startup, and — on a brand-new
-database — runs one bundled demo scan so the dashboard has data to show.
+in production, and runs migrations + admin seeding on startup.
+
+Nothing is ever seeded automatically beyond the admin user and the rule
+catalogue. Demo data is an explicit admin action — ``POST /admin/seed-demo``, or
+Settings → Demo data → Load demo data.
 """
 from __future__ import annotations
 

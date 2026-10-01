@@ -10,8 +10,8 @@ from __future__ import annotations
 from typing import Any
 
 _GOOD_INSTRUCTIONS = (
-    "You are the Contoso HR Assistant, a friendly and precise virtual colleague "
-    "for Contoso employees. Your role is to help staff with leave balances, "
+    "You are the Avanoso HR Assistant, a friendly and precise virtual colleague "
+    "for Avanoso employees. Your role is to help staff with leave balances, "
     "payslips, and HR policy questions. Always confirm the employee's intent "
     "before taking action, and decompose multi-part requests into discrete steps: "
     "identify the employee, retrieve the relevant record, then summarise the answer "
@@ -27,11 +27,11 @@ def demo_environment() -> dict[str, Any]:
     good = {
         "source": "demo",
         "bot_id": "11111111-1111-1111-1111-111111111111",
-        "folder": "contoso_hrAssistant",
-        "schema_name": "contoso_hrAssistant",
-        "display_name": "Contoso HR Assistant",
+        "folder": "avanoso_hrAssistant",
+        "schema_name": "avanoso_hrAssistant",
+        "display_name": "Avanoso HR Assistant",
         "description": (
-            "Helps Contoso employees with leave balances, payslips and HR policy "
+            "Helps Avanoso employees with leave balances, payslips and HR policy "
             "questions, routing anything out of scope to the right team."
         ),
         "instructions": _GOOD_INSTRUCTIONS,
@@ -55,27 +55,27 @@ def demo_environment() -> dict[str, Any]:
         "published": True,
         "solution": {
             "found": True,
-            "unique_name": "ContosoHR",
-            "display_name": "Contoso HR",
+            "unique_name": "AvanosoHR",
+            "display_name": "Avanoso HR",
             "version": "1.4.2.0",
-            "publisher_prefix": "contoso",
-            "publisher_name": "ContosoPublisher",
+            "publisher_prefix": "avanoso",
+            "publisher_name": "AvanosoPublisher",
             "is_default": False,
         },
         "connection_references": [
-            {"logical_name": "contoso_sharedoffice365"},
-            {"logical_name": "contoso_sharedcommondataservice"},
+            {"logical_name": "avanoso_sharedoffice365"},
+            {"logical_name": "avanoso_sharedcommondataservice"},
         ],
         "environment_variables": [
-            {"schema_name": "contoso_HrApiBaseUrl"},
-            {"schema_name": "contoso_TenantRegion"},
+            {"schema_name": "avanoso_HrApiBaseUrl"},
+            {"schema_name": "avanoso_TenantRegion"},
         ],
     }
     poor = {
         "source": "demo",
         "bot_id": "22222222-2222-2222-2222-222222222222",
-        "folder": "contoso_testBot",
-        "schema_name": "contoso_testBot",
+        "folder": "avanoso_testBot",
+        "schema_name": "avanoso_testBot",
         "display_name": "Test Bot",
         "description": "",
         "instructions": "You help.",
