@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import BrandingCard from "../components/BrandingCard";
 import { useNavigate, Link } from "react-router-dom";
 import { api } from "../api/client";
 import { AppConfig, CreatorDirectoryStatus, Environment } from "../api/types";
@@ -447,6 +448,10 @@ export default function AdminPage() {
       </div>
 
       <SetupWizard defaultOpen={!cfg.configured} />
+
+      {/* Branding last: the connection and schedule settings are what an
+          admin must do, this is what they want to do. */}
+      <BrandingCard />
     </div>
   );
 }

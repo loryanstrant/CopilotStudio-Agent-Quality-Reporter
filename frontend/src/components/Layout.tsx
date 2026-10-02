@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../theme/ThemeContext";
+import CustomerLogo, { useHasCustomerBranding } from "./CustomerLogo";
 import CopilotStudioLogo from "./CopilotStudioLogo";
 import SvgDefs from "./SvgDefs";
 
@@ -40,6 +41,7 @@ function LockedNavItem({ label }: { label: string }) {
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
+  const hasCustomerBranding = useHasCustomerBranding();
   const isAdmin = user?.role === "admin";
   const personal = Boolean(user?.has_personal_view);
   const canViewOrg = Boolean(user?.can_view_org);
@@ -52,6 +54,15 @@ export default function Layout({ children }: { children: ReactNode }) {
           references resolve document-wide, so no chart needs its own. */}
       <SvgDefs />
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+        {/* The customer's own logo, above the product mark and separated from
+            it by a hairline. Its own strip rather than a square beside the
+            product mark, because corporate logos are usually wide wordmarks
+            and a 36px square slot shrinks one to an illegible sliver. */}
+        {hasCustomerBranding && (
+          <div className="flex items-center border-b border-slate-200 px-5 py-3 dark:border-slate-700">
+            <CustomerLogo placement="sidebar" />
+          </div>
+        )}
         <div className="flex items-center gap-3 px-5 py-5">
           <CopilotStudioLogo className="h-9 w-9 shrink-0" />
           <div>
